@@ -3,4 +3,6 @@
 
 int board_boot_from_emmc(void);
 
+char *efuse_get_mac(char *addr);
+
 #endif
