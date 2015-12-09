@@ -233,6 +233,10 @@ int amlsd_get_platform_data(struct platform_device *pdev,
 						str, pdata->gpio_dat3);
 		SD_PARSE_GPIO_NUM_PROP(child, "hw_reset",
 						str, pdata->hw_reset);
+#if defined(CONFIG_ARCH_MESON64_ODROIDC2)
+		SD_PARSE_GPIO_NUM_PROP(child, "gpio_volsw",
+						str, pdata->gpio_volsw);
+#endif
 		amlsd_get_host_caps(child, pdata);
 		amlsd_get_host_caps2(child, pdata);
 		pdata->port_init = of_amlsd_init;
