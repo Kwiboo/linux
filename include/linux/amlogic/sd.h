@@ -120,6 +120,9 @@ struct amlsd_platform {
 	unsigned int gpio_dat3;
 	unsigned int hw_reset;
 	unsigned int jtag_pin;
+#if defined(CONFIG_ARCH_MESON64_ODROIDC2)
+	unsigned int gpio_volsw;
+#endif
 	int is_sduart;
 	bool is_in;
 	bool is_tuned;		/* if card has been tuning */
