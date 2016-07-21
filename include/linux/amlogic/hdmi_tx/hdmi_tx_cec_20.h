@@ -311,7 +311,7 @@ struct cec_global_info_t {
 	unsigned int power_status;
 	unsigned int menu_lang;
 	unsigned int cec_version;
-	unsigned int log_addr;
+	unsigned int log_addr[5];
 	unsigned int menu_status;
 	unsigned char osd_name[16];
 	struct input_dev *remote_cec_dev;	/* cec input device */
@@ -331,7 +331,9 @@ void cec_pinmux_set(void);
 void cec_arbit_bit_time_set(unsigned , unsigned , unsigned);
 void cec_clear_buf(unsigned int flag);
 void cec_keep_reset(void);
-void cec_logicaddr_set(int logicaddr);
+void cec_logicaddr_set(int logicaddr, int logreg);
+void cec_logicaddr_clear(void);
+void cec_logicaddr_setByMask(unsigned int mask);
 void ao_cec_init(void);
 void tx_irq_handle(void);
 
@@ -339,6 +341,17 @@ unsigned int cec_config(unsigned int value, bool wr_flag);
 unsigned int cec_intr_stat(void);
 unsigned int cec_phyaddr_config(unsigned int value, bool wr_flag);
 unsigned int cec_logicaddr_config(unsigned int value, bool wr_flag);
+int  cec_node_init(struct hdmitx_dev *hdmitx_device);
+void cec_polling_online_dev(int log_addr, int *bool);
+void cec_imageview_on_smp(void);
+void cec_get_menu_language_smp(void);
+
+void cec_user_control_pressed_irq(unsigned char message_irq);
+void cec_user_control_released_irq(void);
+extern __u16 cec_key_map[160];
+void cec_active_source_smp(void);
+void cec_send_simplink_alive(void);
+void cec_send_simplink_ack(void);
 
 extern bool cec_msg_dbg_en;
 extern struct cec_global_info_t cec_info;
