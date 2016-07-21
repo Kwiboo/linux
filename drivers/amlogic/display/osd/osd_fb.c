@@ -41,8 +41,10 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/uaccess.h>
 #include <linux/dma-mapping.h>
+#ifdef CONFIG_ION
 #include <ion/ion.h>
 #include <meson_ion.h>
+#endif
 /* Amlogic Headers */
 #include <linux/amlogic/vout/vout_notify.h>
 #include <linux/amlogic/instaboot/instaboot.h>
@@ -641,7 +643,9 @@ static int osd_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg)
 	unsigned long ret;
 	u32 flush_rate;
 	struct fb_sync_request_s sync_request;
+#ifdef CONFIG_ION
 	struct fb_dmabuf_export dmaexp;
+#endif
 
 	switch (cmd) {
 	case  FBIOPUT_OSD_SRCKEY_ENABLE:
@@ -679,10 +683,12 @@ static int osd_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg)
 	case FBIOPUT_OSD_ROTATE_ON:
 	case FBIOPUT_OSD_ROTATE_ANGLE:
 		break;
+#ifdef CONFIG_ION
 	case FBIOGET_DMABUF:
 		ret = copy_from_user(&dmaexp, argp,
 				sizeof(struct fb_dmabuf_export));
 		break;
+#endif
 	case FBIOPUT_OSD_BLOCK_MODE:
 		ret = copy_from_user(&block_mode, argp, sizeof(u32));
 		break;
@@ -855,6 +861,7 @@ static int osd_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg)
 			info->var.yoffset = sync_request.yoffset;
 		}
 		break;
+#ifdef CONFIG_ION
 	case FBIOGET_DMABUF:
 		{
 			if (info->node == DEV_OSD0 && osd_get_afbc()) {
@@ -875,6 +882,7 @@ static int osd_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg)
 				? -EFAULT : 0;
 			break;
 		}
+#endif
 	case FBIO_WAITFORVSYNC:
 		osd_wait_vsync_event();
 		ret = copy_to_user(argp, &ret, sizeof(u32));
@@ -969,6 +977,7 @@ static int osd_open(struct fb_info *info, int arg)
 	fb_index = fbdev->fb_index;
 	fix = &info->fix;
 	var = &info->var;
+#ifdef CONFIG_ION
 	if (fb_rmem.base == 0) {
 		pr_info("use ion buffer for fb memory\n");
 		if (!fb_ion_client)
@@ -1050,6 +1059,7 @@ static int osd_open(struct fb_info *info, int arg)
 				(unsigned long)fb_rmem_size[fb_index] / SZ_1M);
 		}
 	} else {
+#endif
 		fb_rmem_size[fb_index] = fb_memsize[fb_index];
 		if (fb_index == DEV_OSD0)
 			fb_rmem_paddr[fb_index] = fb_rmem.base;
@@ -1069,7 +1079,9 @@ static int osd_open(struct fb_info *info, int arg)
 				osd_log_err("fb[%d] ioremap error",
 						fb_index);
 		}
+#ifdef CONFIG_ION
 	}
+#endif
 	fbdev->fb_len = fb_rmem_size[fb_index];
 	fbdev->fb_mem_paddr = fb_rmem_paddr[fb_index];
 	fbdev->fb_mem_vaddr = fb_rmem_vaddr[fb_index];
