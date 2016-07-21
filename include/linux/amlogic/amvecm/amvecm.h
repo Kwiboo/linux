@@ -25,6 +25,43 @@
 #include <linux/amlogic/cpu_version.h>
 
 
+enum vpp_matrix_sel_e {
+	VPP_MATRIX_VD1,
+	VPP_MATRIX_VD2,
+	VPP_MATRIX_POST,
+	VPP_MATRIX_XVYCC,
+};
+
+enum vpp_matrix_csc_e {
+	VPP_MATRIX_NULL = 0,
+	VPP_MATRIX_RGB_YUV601 = 0x1,
+	VPP_MATRIX_RGB_YUV601F = 0x2,
+	VPP_MATRIX_RGB_YUV709 = 0x3,
+	VPP_MATRIX_RGB_YUV709F = 0x4,
+	VPP_MATRIX_YUV601_RGB = 0x10,
+	VPP_MATRIX_YUV601_YUV601F = 0x11,
+	VPP_MATRIX_YUV601_YUV709 = 0x12,
+	VPP_MATRIX_YUV601_YUV709F = 0x13,
+	VPP_MATRIX_YUV601F_RGB = 0x14,
+	VPP_MATRIX_YUV601F_YUV601 = 0x15,
+	VPP_MATRIX_YUV601F_YUV709 = 0x16,
+	VPP_MATRIX_YUV601F_YUV709F = 0x17,
+	VPP_MATRIX_YUV709_RGB = 0x20,
+	VPP_MATRIX_YUV709_YUV601 = 0x21,
+	VPP_MATRIX_YUV709_YUV601F = 0x22,
+	VPP_MATRIX_YUV709_YUV709F = 0x23,
+	VPP_MATRIX_YUV709F_RGB = 0x24,
+	VPP_MATRIX_YUV709F_YUV601 = 0x25,
+	VPP_MATRIX_YUV709F_YUV709 = 0x26,
+	VPP_MATRIX_BT2020YUV_BT2020RGB = 0x40,
+	VPP_MATRIX_BT2020RGB_709RGB,
+	VPP_MATRIX_BT2020RGB_CUSRGB,
+};
+
+
+#define CSC_ON              1
+#define CSC_OFF             0
+
 /* struct ve_dnlp_s          video_ve_dnlp; */
 
 #define FLAG_RSV31              (1 << 31)
@@ -41,8 +78,8 @@
 #define FLAG_VLOCK_EN          (1 << 20)
 #define FLAG_VE_DNLP_EN         (1 << 19)
 #define FLAG_VE_DNLP_DIS        (1 << 18)
-#define FLAG_RSV17              (1 << 17)
-#define FLAG_RSV16              (1 << 16)
+#define FLAG_VADJ1_CON			(1 << 17)
+#define FLAG_VADJ1_BRI			(1 << 16)
 #define FLAG_GAMMA_TABLE_EN     (1 << 15)
 #define FLAG_GAMMA_TABLE_DIS    (1 << 14)
 #define FLAG_GAMMA_TABLE_R      (1 << 13)
@@ -50,7 +87,7 @@
 #define FLAG_GAMMA_TABLE_B      (1 << 11)
 #define FLAG_RGB_OGO            (1 << 10)
 #define FLAG_RSV9               (1 <<  9)
-#define FLAG_RSV8               (1 <<  8)
+#define FLAG_MATRIX_UPDATE      (1 <<  8)
 #define FLAG_BRI_CON            (1 <<  7)
 #define FLAG_LVDS_FREQ_SW       (1 <<  6)
 #define FLAG_REG_MAP5           (1 <<  5)
@@ -72,6 +109,7 @@
 #define AMVECM_IOC_VE_DNLP_EN   _IO(_VE_CM, 0x23)
 #define AMVECM_IOC_VE_DNLP_DIS  _IO(_VE_CM, 0x24)
 #define AMVECM_IOC_VE_NEW_DNLP  _IOW(_VE_CM, 0x25, struct ve_dnlp_table_s)
+#define AMVECM_IOC_G_HIST_BIN   _IOW(_VE_CM, 0x26, struct vpp_hist_param_s)
 
 
 /* VPP.CM IOCTL command list */
@@ -141,6 +179,7 @@ static inline uint32_t READ_VPP_REG_BITS(uint32_t reg,
 }
 
 extern void amvecm_on_vs(struct vframe_s *vf);
+extern void refresh_on_vs(struct vframe_s *vf);
 
 #endif /* AMVECM_H */
 

@@ -160,7 +160,8 @@ static long cmd_load_code(struct esm_device *esm,
 		sizeof(struct esm_hld_ioctl_load_code));
 	if (ret)
 		pr_info("copy left %ld Bytes\n", ret);
-	esm->code_loaded = krequest.returned_status == ESM_HL_DRIVER_SUCCESS;
+	esm->code_loaded =
+		(krequest.returned_status == ESM_HL_DRIVER_SUCCESS);
 
 	return 0;
 }
@@ -232,7 +233,8 @@ static long cmd_load_code32(struct esm_device *esm,
 		sizeof(struct compact_esm_hld_ioctl_load_code));
 	if (ret)
 		pr_info("copy left %ld Bytes\n", ret);
-	esm->code_loaded = krequest.returned_status == ESM_HL_DRIVER_SUCCESS;
+	esm->code_loaded =
+		(krequest.returned_status == ESM_HL_DRIVER_SUCCESS);
 
 	return 0;
 }
@@ -1182,6 +1184,10 @@ static void hdcp22_hw_init(void)
 	hdmitx_wr_reg(HDMITX_DWC_A_HDCPCFG0, 0x73);
 	hd_set_reg_bits(P_HHI_GCLK_MPEG2, 1, 3, 1);
 	hd_write_reg(P_HHI_HDCP22_CLK_CNTL, 0x01000100);
+	/* Enable skpclk to HDCP2.2 IP */
+	hdmitx_set_reg_bits(HDMITX_TOP_CLK_CNTL, 1, 7, 1);
+	/* Enable esmclk to HDCP2.2 IP */
+	hdmitx_set_reg_bits(HDMITX_TOP_CLK_CNTL, 1, 6, 1);
 	/* Enable tmds_clk to HDCP2.2 IP */
 	hdmitx_set_reg_bits(HDMITX_TOP_CLK_CNTL, 1, 5, 1);
 	/* sw_reset_hdcp22: to reset HDCP2.2 IP */

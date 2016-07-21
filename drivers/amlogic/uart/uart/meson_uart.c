@@ -27,12 +27,17 @@
 #include <linux/platform_device.h>
 #include <linux/reset.h>
 #include <linux/serial.h>
-#include <linux/serial_core.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/clk-private.h>
 #include <linux/clk-provider.h>
+#include <linux/amlogic/iomap.h>
+
+#ifdef CONFIG_SUPPORT_SYSRQ
+#define SUPPORT_SYSRQ
+#endif
+#include <linux/serial_core.h>
 
 #include <linux/vmalloc.h>
 #include "meson_uart.h"
@@ -88,13 +93,14 @@
 #define AML_UART_BAUD_MASK		0x7fffff
 #define AML_UART_BAUD_USE		BIT(23)
 #define AML_UART_BAUD_XTAL		BIT(24)
+#define AML_UART_BAUD_XTAL_TICK	BIT(26)
 
 #define AML_UART_PORT_MAX		16
 #define AML_UART_DEV_NAME		"ttyS"
 
 /*#define UART_TEST_DEBUG*/
 static struct uart_driver meson_uart_driver;
-
+unsigned int xtal_tick_en = 0;
 struct meson_uart_port {
 	struct uart_port	port;
 	spinlock_t wr_lock;
@@ -105,6 +111,13 @@ struct meson_uart_port {
 #define to_meson_port(uport)  container_of(uport, struct meson_uart_port, port)
 static struct meson_uart_port *meson_ports[AML_UART_PORT_MAX];
 
+struct uart_port *get_uart_port(int id)
+{
+	struct uart_port *port;
+	port = &meson_ports[id]->port;
+	return port;
+}
+EXPORT_SYMBOL(get_uart_port);
 static int meson_serial_console_setup(struct console *co, char *options);
 
 
@@ -172,6 +185,27 @@ static ssize_t printk_mode_store(struct device_driver *drv, const char *buf,
 
 static DRIVER_ATTR(printkmode, S_IRUGO | S_IWUSR, printk_mode_show,
 		   printk_mode_store);
+
+
+/***********  SYSRQ  **************/
+static int support_sysrq;
+
+static ssize_t support_sysrq_show(struct device_driver *drv, char *buf)
+{
+	return sprintf(buf, "0x%0x\n",  support_sysrq);
+}
+
+static ssize_t support_sysrq_store(struct device_driver *drv, const char *buf,
+			       size_t count)
+{
+	unsigned long long res = 0;
+	if (!kstrtoull(buf, 16, &res))
+		support_sysrq = res;
+	return count;
+}
+
+static DRIVER_ATTR(sysrqsupport, S_IRUGO | S_IWUSR, support_sysrq_show,
+		   support_sysrq_store);
 
 
 static void get_next_node(struct meson_uart_list *cur_col,
@@ -415,6 +449,22 @@ static void meson_receive_chars(struct uart_port *port)
 		ch = readl(port->membase + AML_UART_RFIFO);
 		ch &= 0xff;
 
+#ifdef SUPPORT_SYSRQ
+		if (support_sysrq == 1) {
+			if ((status == 0) && (ch == 0)) {
+				port->icount.brk++;
+				if (uart_handle_break(port))
+					continue;
+			}
+
+			if (port->sysrq)
+				flag = TTY_BREAK;
+
+			if (uart_handle_sysrq_char(port, ch))
+				continue;
+		}
+#endif
+
 		uart_insert_char(port, status, AML_UART_RX_FIFO_OVERFLOW,
 				 ch, flag);
 		/*
@@ -482,6 +532,7 @@ static void meson_uart_change_speed(struct uart_port *port, unsigned long baud)
 {
 	u32 val;
 	struct meson_uart_port *mup = to_meson_port(port);
+	struct platform_device *pdev = to_platform_device(port->dev);
 	while (!(readl(port->membase + AML_UART_STATUS) & AML_UART_TX_EMPTY))
 		cpu_relax();
 
@@ -492,13 +543,24 @@ static void meson_uart_change_speed(struct uart_port *port, unsigned long baud)
 	val = readl(port->membase + AML_UART_REG5);
 	val &= ~AML_UART_BAUD_MASK;
 	if (port->uartclk == 24000000) {
-		pr_info("ttyS%d use xtal %d change %ld to %ld\n",
-			port->line, port->uartclk,
-			mup->baud, baud);
-		val = (port->uartclk / 3) / baud  - 1;
-		val |= (AML_UART_BAUD_USE|AML_UART_BAUD_XTAL);
+		if (xtal_tick_en) {
+			/*xtal_tick_en first*/
+			aml_aobus_update_bits((0x19<<2), (1<<18), (1<<18));
+			dev_info(&pdev->dev, "ttyS%d use xtal(24M) %d change %ld to %ld\n",
+				port->line, port->uartclk,
+				mup->baud, baud);
+			val = (port->uartclk) / baud  - 1;
+			val |= (AML_UART_BAUD_USE|AML_UART_BAUD_XTAL
+				|AML_UART_BAUD_XTAL_TICK);
+		} else {
+			dev_info(&pdev->dev, "ttyS%d use xtal(8M) %d change %ld to %ld\n",
+				port->line, port->uartclk,
+				mup->baud, baud);
+			val = (port->uartclk / 3) / baud  - 1;
+			val |= (AML_UART_BAUD_USE|AML_UART_BAUD_XTAL);
+		}
 	} else {
-		pr_info("ttyS%d use clk81 %d change %ld to %ld\n",
+		dev_info(&pdev->dev, "ttyS%d use clk81 %d change %ld to %ld\n",
 			port->line, port->uartclk,
 			mup->baud, baud);
 		val = ((port->uartclk * 10 / (baud * 4) + 5) / 10) - 1;
@@ -628,7 +690,8 @@ static int meson_uart_request_port(struct uart_port *port)
 			return -ENOMEM;
 	}
 
-	pr_info("==uart%d reg addr = %p\n", port->line, port->membase);
+	dev_info(&pdev->dev, "==uart%d reg addr = %p\n",
+						port->line, port->membase);
 	val = (AML_UART_RECV_IRQ(1) | AML_UART_XMIT_IRQ(port->fifosize / 2));
 	writel(val, port->membase + AML_UART_MISC);
 
@@ -733,6 +796,11 @@ static void meson_serial_console_write(struct console *co, const char *s,
 						+(struct_size
 						+DEFAULT_STR_LEN))) {
 						cur_s = data_cache;
+					} else if (tmp_count > (struct_size +
+						DEFAULT_STR_LEN)) {
+						cur_s = tail_s->s +
+						tail_s->offset + tail_s->count;
+						need_default = 1;
 					} else {
 						cur_s = data_cache;
 						need_default = 1;
@@ -985,6 +1053,13 @@ static int meson_uart_probe(struct platform_device *pdev)
 	prop = of_get_property(pdev->dev.of_node, "fifosize", NULL);
 	if (prop)
 		port->fifosize = of_read_ulong(prop, 1);
+
+	if (!xtal_tick_en) {
+		prop = of_get_property(pdev->dev.of_node, "xtal_tick_en", NULL);
+		if (prop)
+			xtal_tick_en = of_read_ulong(prop, 1);
+	}
+	xtal_tick_en = 0;
 	port->uartclk = clk->rate;
 	port->iotype = UPIO_MEM;
 	port->mapbase = res_mem->start;
@@ -1006,6 +1081,10 @@ static int meson_uart_probe(struct platform_device *pdev)
 	ret = uart_add_one_port(&meson_uart_driver, port);
 	if (ret)
 		meson_ports[pdev->id] = NULL;
+
+	prop = of_get_property(pdev->dev.of_node, "support-sysrq", NULL);
+	if (prop)
+		support_sysrq = of_read_ulong(prop, 1);
 
 	return ret;
 }
@@ -1058,7 +1137,7 @@ static int meson_uart_suspend(struct platform_device *pdev,
 	/* if rts/cts is open, pull up rts pin
 		when in suspend */
 	if (!(val & AML_UART_TWO_WIRE_EN)) {
-		pr_info("pull up rts");
+		dev_info(&pdev->dev, "pull up rts");
 		val |= (0x1 << 31);
 		writel(val, port->membase + AML_UART_CONTROL);
 	}
@@ -1102,6 +1181,9 @@ static int __init meson_uart_init(void)
 
 	ret = driver_create_file(&meson_uart_platform_driver.driver,
 		&driver_attr_printkmode);
+
+	ret = driver_create_file(&meson_uart_platform_driver.driver,
+		&driver_attr_sysrqsupport);
 
 	INIT_LIST_HEAD(&cur_col_management.list_head);
 	spin_lock_init(&cur_col_management.lock);

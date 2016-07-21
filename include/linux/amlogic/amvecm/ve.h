@@ -71,6 +71,76 @@ struct ve_dnlp_table_s {
 	unsigned int lowalpha;
 	unsigned int midalpha;
 	unsigned int hghalpha;
+	unsigned int adj_level;
+	unsigned int new_adj_level;
+	unsigned int new_mvreflsh;
+	unsigned int new_gmma_rate;
+	unsigned int new_lowalpha;
+	unsigned int new_hghalpha;
+	unsigned int new_sbgnbnd;
+	unsigned int new_sendbnd;
+	unsigned int new_clashBgn;
+	unsigned int new_clashEnd;
+	unsigned int new_cliprate;
+	unsigned int new_mtdbld_rate;
+	unsigned int new_blkgma_rate;
+	unsigned int dnlp_sel;
+	unsigned int dnlp_blk_cctr;/*blk signal add brightness*/
+	unsigned int dnlp_brgt_ctrl;
+	unsigned int dnlp_brgt_range;
+	unsigned int dnlp_brght_add;
+	unsigned int dnlp_brght_max;
+	unsigned int dnlp_almst_wht;
+	unsigned int dnlp_hghbin;/*1*/
+	unsigned int dnlp_hghnum;
+	unsigned int dnlp_lowbin;
+	unsigned int dnlp_lownum;
+	unsigned int dnlp_bkgend;
+	unsigned int dnlp_bkgert;
+	unsigned int dnlp_blkext;
+	unsigned int dnlp_whtext;
+	unsigned int dnlp_bextmx;
+	unsigned int dnlp_wextmx;
+	unsigned int dnlp_smhist_ck;
+	unsigned int dnlp_glb_crate;/*12*/
+	unsigned int dnlp_lrate00;/*0-64bin curve slope*/
+	unsigned int dnlp_lrate02;
+	unsigned int dnlp_lrate04;
+	unsigned int dnlp_lrate06;
+	unsigned int dnlp_lrate08;
+	unsigned int dnlp_lrate10;
+	unsigned int dnlp_lrate12;
+	unsigned int dnlp_lrate14;
+	unsigned int dnlp_lrate16;
+	unsigned int dnlp_lrate18;
+	unsigned int dnlp_lrate20;
+	unsigned int dnlp_lrate22;
+	unsigned int dnlp_lrate24;
+	unsigned int dnlp_lrate26;
+	unsigned int dnlp_lrate28;
+	unsigned int dnlp_lrate30;
+	unsigned int dnlp_lrate32;
+	unsigned int dnlp_lrate34;
+	unsigned int dnlp_lrate36;
+	unsigned int dnlp_lrate38;
+	unsigned int dnlp_lrate40;
+	unsigned int dnlp_lrate42;
+	unsigned int dnlp_lrate44;
+	unsigned int dnlp_lrate46;
+	unsigned int dnlp_lrate48;
+	unsigned int dnlp_lrate50;
+	unsigned int dnlp_lrate52;
+	unsigned int dnlp_lrate54;
+	unsigned int dnlp_lrate56;
+	unsigned int dnlp_lrate58;
+	unsigned int dnlp_lrate60;
+	unsigned int dnlp_lrate62;
+};
+struct vpp_hist_param_s {
+	unsigned int vpp_hist_pow;
+	unsigned int vpp_luma_sum;
+	unsigned int vpp_pixel_sum;
+	unsigned short vpp_histgram[64];
 };
 #else
 struct ve_dnlp_s {

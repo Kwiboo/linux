@@ -28,6 +28,8 @@
 #define KEY_WRITE_PERMIT	(10<<4)
 #define KEY_WRITE_PROHIBIT	(11<<4)
 
+#define SHA256_SUM_LEN	32
+
 static struct unifykey_dev_t *unifykey_devp;
 static dev_t unifykey_devno;
 static struct device *unifykey_device;
@@ -37,6 +39,7 @@ typedef int (*key_unify_dev_init)(char *buf, unsigned int len);
 typedef int (*key_unify_dev_uninit)(void);
 
 static int init_flag;
+static int module_init_flag;
 
 static int key_storage_init(char *buf, unsigned int len)
 {
@@ -123,13 +126,12 @@ static int key_storage_write(char *keyname, unsigned char *keydata,
 {
 	int ret = 0;
 	ssize_t writenLen = 0;
-	const int isSecure = 0;
 	/* fixme, todo write down this. */
 
 	writenLen = amlkey_write((uint8_t *)keyname,
 		(uint8_t *)keydata,
 		datalen,
-		isSecure);
+		flag);
 	if (writenLen != datalen) {
 		pr_err("Want to write %u bytes, but only %zd Bytes\n",
 			datalen,
@@ -137,6 +139,22 @@ static int key_storage_write(char *keyname, unsigned char *keydata,
 		return -EINVAL;
 	}
 
+	return ret;
+}
+
+static int key_secure_read_hash(char *keyname, unsigned char *keydata,
+		unsigned int datalen, unsigned int *reallen, int flag)
+{
+	int ret;
+
+	ret = amlkey_hash_4_secure((uint8_t *)keyname, keydata);
+	if (ret) {
+		pr_err("Failed when gen hash for sec-key[%s],ret=%d\n",
+				keyname,
+				ret);
+		return -EINVAL;
+	}
+	*reallen = SHA256_SUM_LEN;
 	return ret;
 }
 
@@ -163,7 +181,7 @@ static int key_storage_read(char *keyname, unsigned char *keydata,
 			readLen);
 		return -EINVAL;
 	}
-
+	*reallen = readLen;
 	return ret;
 }
 
@@ -337,11 +355,7 @@ int key_unify_write(char *keyname, unsigned char *keydata,
 			err = key_efuse_write(keyname, keydata, datalen);
 			break;
 		case KEY_M_SECURE:
-		#if 0
-			/* todo */
-			if (err == 0x1fe)
-				err = -0x1fe;
-		#endif
+			err = key_storage_write(keyname, keydata, datalen, 1);
 			break;
 		case KEY_M_NORMAL:
 			err = key_storage_write(keyname, keydata, datalen, 0);
@@ -370,6 +384,13 @@ int key_unify_read(char *keyname, unsigned char *keydata,
 {
 	int err = 0;
 	struct key_item_t *unifykey;
+
+	if (!keydata) {
+		pr_err("%s:%d, keydata is NULL\n",
+			__func__, __LINE__);
+		return -EINVAL;
+	}
+
 	unifykey = unifykey_find_item_by_name(keyname);
 	if (unifykey == NULL) {
 		pr_err("%s:%d,%s key name is not exist\n",
@@ -390,7 +411,8 @@ int key_unify_read(char *keyname, unsigned char *keydata,
 				datalen, reallen);
 			break;
 		case KEY_M_SECURE:
-
+			err = key_secure_read_hash(keyname, keydata,
+				datalen, reallen, 1);
 			break;
 		case KEY_M_NORMAL:
 			err = key_storage_read(keyname, keydata,
@@ -504,11 +526,9 @@ int key_unify_query(char *keyname, unsigned int *keystate,
 			}
 			break;
 		case KEY_M_SECURE:
-			/* err = key_securestorage_query(keyname,keystate); */
+			err = key_storage_query(keyname, keystate);
 			*keypermit = KEY_READ_PROHIBIT;
 			*keypermit |= KEY_WRITE_PERMIT;
-			pr_info("Fail to query secure key, keypermit=%d",
-				*keypermit);
 			break;
 		case KEY_M_NORMAL:
 			err = key_storage_query(keyname, keystate);
@@ -543,6 +563,12 @@ int key_unify_uninit(void)
 	return bakerr;
 }
 EXPORT_SYMBOL(key_unify_uninit);
+
+int key_unify_get_init_flag(void)
+{
+	return module_init_flag;
+}
+EXPORT_SYMBOL(key_unify_get_init_flag);
 
 static int unifykey_open(struct inode *inode, struct file *file)
 {
@@ -658,6 +684,16 @@ static long unifykey_unlocked_ioctl(struct file *file,
 	return 0;
 }
 
+#ifdef CONFIG_COMPAT
+static long unifykey_compat_ioctl(struct file *file,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	return unifykey_unlocked_ioctl(file, cmd,
+				(unsigned long) compat_ptr(arg));
+}
+#endif
+
 static ssize_t unifykey_read(struct file *file,
 	char __user *buf,
 	size_t count,
@@ -667,13 +703,8 @@ static ssize_t unifykey_read(struct file *file,
 	int id;
 	unsigned int reallen;
 	struct key_item_t *item;
-	char *local_buf;
-	local_buf = kzalloc(count, GFP_KERNEL);
-	if (!local_buf) {
-		pr_err(KERN_INFO "memory not enough,%s:%d\n",
-			__func__, __LINE__);
-		return -ENOMEM;
-	}
+	char *local_buf = NULL;
+
 	id = (int)(*ppos);
 	pr_err("%s() %d\n", __func__, __LINE__);
 	item = unifykey_find_item_by_id(id);
@@ -681,6 +712,16 @@ static ssize_t unifykey_read(struct file *file,
 		ret =  -EINVAL;
 		goto exit;
 	}
+
+	if (item->dev == KEY_M_SECURE)
+		count = SHA256_SUM_LEN;
+	local_buf = kzalloc(count, GFP_KERNEL);
+	if (!local_buf) {
+		pr_err(KERN_INFO "memory not enough,%s:%d\n",
+			__func__, __LINE__);
+		return -ENOMEM;
+	}
+
 	pr_err("%s() %d\n", __func__, __LINE__);
 	ret = key_unify_read(item->name, local_buf, count, &reallen);
 	if (ret < 0)
@@ -869,7 +910,7 @@ static ssize_t name_store(struct class *cla,
 		memcpy(name, buf, count);
 
 	query_name_len = strlen(name);
-	pr_err("%s() %d, name %s, %d\n",
+	pr_info("%s() %d, name %s, %d\n",
 		__func__,
 		__LINE__,
 		name,
@@ -881,7 +922,7 @@ static ssize_t name_store(struct class *cla,
 			if (!strncmp(name, unifykey->name,
 				((strlen(unifykey->name) > query_name_len)
 				? strlen(unifykey->name) : query_name_len))) {
-				pr_err("%s() %d\n", __func__, __LINE__);
+				pr_info("%s() %d\n", __func__, __LINE__);
 				curkey = unifykey;
 				break;
 			}
@@ -922,6 +963,8 @@ static ssize_t read_show(struct class *cla,
 				curkey->name);
 			goto _out;
 		}
+		if (curkey->dev == KEY_M_SECURE)
+			keysize = SHA256_SUM_LEN;
 		pr_err("name: %s, size %d\n", curkey->name, keysize);
 		keydata = kzalloc(keysize, GFP_KERNEL);
 		if (keydata == NULL) {
@@ -1040,8 +1083,12 @@ static const struct file_operations unifykey_fops = {
 	.release    = unifykey_release,
 	.read       = unifykey_read,
 	.write      = unifykey_write,
-	.unlocked_ioctl      = unifykey_unlocked_ioctl,
+	.unlocked_ioctl  = unifykey_unlocked_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= unifykey_compat_ioctl,
+#endif
 };
+
 
 #define KEY_READ_ATTR  (S_IRUSR|S_IRGRP)
 #define KEY_WRITE_ATTR (S_IWUSR|S_IWGRP)
@@ -1174,6 +1221,7 @@ static int __init aml_unifykeys_init(void)
 		pr_err("failed to register unifykey driver, error %d\n", ret);
 		return -ENODEV;
 	}
+	module_init_flag = 1;
 	pr_info(KERN_INFO "%s done!\n", __func__);
 
 	return ret;

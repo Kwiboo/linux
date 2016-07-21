@@ -40,6 +40,7 @@ static const struct reg_s *remoteregsTab[] = {
 	RDECODEMODE_SW,
 	RDECODEMODE_NEC_RCA_2IN1,
 	RDECODEMODE_NEC_TOSHIBA_2IN1,
+	RDECODEMODE_NEC_RCMM_2IN1,
 	RDECODEMODE_SW_NEC,
 	NULL,
 	RDECODEMODE_SW_DUOKAN
@@ -77,7 +78,7 @@ int set_remote_mode(int mode)
 void setremotereg(const struct reg_s *r)
 {
 	am_remote_write_reg(r->reg, r->val);
-	input_dbg("[0x%lx] = 0x%x\n", (g_remote_ao_offset + ((r->reg) << 2)),
+	pr_debug("[0x%lx] = 0x%x\n", (g_remote_ao_offset + ((r->reg) << 2)),
 		r->val);
 }
 
@@ -199,6 +200,27 @@ void get_cur_scancode(struct remote *remote_data)
 				temp_cur_lsbkeycode = 0;
 			}
 		}
+	} else if (remote_data->work_mode == DECODEMODE_NEC_RCMM_2IN1) {
+		if (am_remote_read_reg(DURATION_REG1_AND_STATUS)>>3&0x1) {
+			/*new*/
+			temp_cur_lsbkeycode = am_remote_read_reg(FRAME_BODY);
+		if (temp_cur_lsbkeycode) {
+			remote_data->temp_work_mode = DECODEMODE_RCMM;
+			remote_data->cur_lsbkeycode = temp_cur_lsbkeycode;
+			temp_cur_lsbkeycode = 0;
+			}
+		}
+		if (am_remote_read_reg(DURATION_REG1_AND_STATUS-0x40)>>3&0x1) {
+			/*old*/
+			temp_cur_lsbkeycode =
+			am_remote_read_reg(FRAME_BODY-0x40);
+		if (temp_cur_lsbkeycode) {
+			remote_data->temp_work_mode = DECODEMODE_NEC;
+			remote_data->cur_lsbkeycode =  temp_cur_lsbkeycode;
+			temp_cur_lsbkeycode = 0;
+			}
+		}
+
 	} else if (remote_data->work_mode > DECODEMODE_MAX) {
 		remote_data->cur_lsbkeycode = remote_data->cur_keycode;
 		if (remote_data->work_mode == DECODEMODE_SW_DUOKAN)
@@ -232,6 +254,21 @@ void get_cur_scanstatus(struct remote *remote_data)
 		if (remote_data->temp_work_mode == DECODEMODE_NEC)
 			remote_data->frame_status =
 			    am_remote_read_reg(DURATION_REG1_AND_STATUS - 0x40);
+	} else if (remote_data->work_mode ==  DECODEMODE_NEC_RCMM_2IN1) {
+		if (remote_data->temp_work_mode == DECODEMODE_RCMM) {
+			remote_data->frame_status =
+				am_remote_read_reg(DURATION_REG1_AND_STATUS);
+			if (remote_data->cur_lsbkeycode == 0x1 ||
+				remote_data->cur_lsbkeycode == 0x0) {
+				remote_data->frame_status = 0x1;
+				remote_data->cur_lsbkeycode =  0x0;
+			}
+
+		}
+		if (remote_data->temp_work_mode == DECODEMODE_NEC) {
+			remote_data->frame_status =
+			am_remote_read_reg(DURATION_REG1_AND_STATUS-0x40);
+		}
 	} else
 		remote_data->frame_status =
 		    am_remote_read_reg(DURATION_REG1_AND_STATUS);
@@ -283,6 +320,13 @@ unsigned int SANYO_DOMAIN(struct remote *remote_data, int domain)
  */
 unsigned int RCMM_DOMAIN(struct remote *remote_data, int domain)
 {
+#if 1
+	if (domain)
+		return (remote_data->cur_lsbkeycode) & 0xff;
+	else
+		return (remote_data->cur_lsbkeycode>>16) & 0xffff;
+
+#else
 	if (domain) {
 		if (((remote_data->cur_lsbkeycode >> 12) & 0xfff)) {
 			switch ((remote_data->cur_lsbkeycode >> 20) & 0xf) {
@@ -351,7 +395,7 @@ unsigned int RCMM_DOMAIN(struct remote *remote_data, int domain)
 			return (remote_data->cur_lsbkeycode >> 8) & 0x3;
 		}
 	}
-
+#endif
 }
 
 /*
@@ -422,9 +466,9 @@ unsigned int RC5_DOMAIN(struct remote *remote_data, int domain)
 unsigned int RC6_DOMAIN(struct remote *remote_data, int domain)
 {
 	if (domain)
-		return (remote_data->cur_lsbkeycode >> 5) & 0x7f;
+		return (remote_data->cur_lsbkeycode) & 0xff;
 	else
-		return remote_data->cur_lsbkeycode & 0x1f;
+		return (remote_data->cur_lsbkeycode >> 16) & 0xffff;
 
 }
 
@@ -474,25 +518,25 @@ unsigned int NULL_DUOKAN_DOMAIN(struct remote *remote_data, int domain)
 
 unsigned int (*get_cur_key_domian[])
 (struct remote *remote_data, int domain) = {
-NEC_DOMAIN,
-	    DUOKAN_DOMAIN,
-	    KDB_NEC_DOMAIN,
-	    RCMM_DOMAIN,
-	    COMCAST_DOMAIN,
-	    MITSUBISHI_DOMAIN,
-	    SONYSIRC_DOMAIN,
-	    TOSHIBA_DOMAIN,
-	    RC5_DOMAIN,
-	    RC6_DOMAIN,
-	    NULL_DUOKAN_DOMAIN,
-	    RCA_DOMAIN,
-	    NULL_DUOKAN_DOMAIN,
-	    NULL_DUOKAN_DOMAIN,
-	    NULL_DUOKAN_DOMAIN,
-	    NULL_DUOKAN_DOMAIN,
-	    NULL_DUOKAN_DOMAIN, NULL_DUOKAN_DOMAIN, KDB_DUOKAN_DOMAIN};
+	NEC_DOMAIN,
+	DUOKAN_DOMAIN,
+	RCMM_DOMAIN,
+	KDB_NEC_DOMAIN,
+	COMCAST_DOMAIN,
+	MITSUBISHI_DOMAIN,
+	SONYSIRC_DOMAIN,
+	TOSHIBA_DOMAIN,
+	RC6_DOMAIN,
+	RC5_DOMAIN,
+	NULL_DUOKAN_DOMAIN,
+	RCA_DOMAIN,
+	NULL_DUOKAN_DOMAIN,
+	NULL_DUOKAN_DOMAIN,
+	NULL_DUOKAN_DOMAIN,
+	NULL_DUOKAN_DOMAIN,
+	NULL_DUOKAN_DOMAIN, NULL_DUOKAN_DOMAIN, KDB_DUOKAN_DOMAIN};
 
-int remote_hw_reprot_null_key(struct remote *remote_data)
+int remote_hw_report_null_key(struct remote *remote_data)
 {
 	input_dbg("%s,it is a null key\n", __func__);
 	get_cur_scancode(remote_data);
@@ -505,7 +549,7 @@ irqreturn_t remote_null_bridge_isr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-int remote_hw_reprot_key(struct remote *remote_data)
+int remote_hw_report_key(struct remote *remote_data)
 {
 	static int last_scan_code;
 	int i;
@@ -621,7 +665,7 @@ int remote_hw_reprot_key(struct remote *remote_data)
 		if (remote_data->repeat_enable) {
 			repeat_count++;
 			if (time_after(jiffies, remote_data->repeat_tick)) {
-				if (repeat_count > 1)
+				if (repeat_count > 3)
 					remote_data->remote_send_key
 					    (remote_data->input,
 					     remote_data->repeat_release_code,
@@ -652,7 +696,7 @@ int remote_hw_reprot_key(struct remote *remote_data)
 	return 0;
 }
 
-int remote_duokan_reprot_key(struct remote *remote_data)
+int remote_duokan_report_key(struct remote *remote_data)
 {
 	static int last_scan_code;
 	int i;
@@ -861,8 +905,64 @@ int remote_duokan_reprot_key(struct remote *remote_data)
 #endif
 	return 0;
 }
+int remote_rc6_report_key(struct remote *remote_data)
+{
+	static int last_scan_code;
+	int i;
 
-int remote_hw_nec_rca_2in1_reprot_key(struct remote *remote_data)
+	get_cur_scanstatus(remote_data);
+	get_cur_scancode(remote_data);
+	if (!auto_repeat_count) {
+		if (remote_data->cur_lsbkeycode) {	/*key first press */
+			if (remote_data->ig_custom_enable) {
+				for (i = 0; i < ARRAY_SIZE
+					(remote_data->custom_code);) {
+					if (remote_data->custom_code[i] !=
+						get_cur_key_domian
+						[remote_data->work_mode]
+						(remote_data, CUSTOMDOMAIN)) {
+						/*return -1; */
+						i++;
+					} else {
+						remote_data->map_num = i;
+						break;
+					}
+					if (i == ARRAY_SIZE
+						(remote_data->custom_code)) {
+						input_dbg
+						("Wrong custom code 0x%08x\n",
+						remote_data->cur_lsbkeycode);
+						return -1;
+				}
+			}
+		}
+
+	remote_data->remote_send_key(remote_data->input,
+		     get_cur_key_domian
+		     [remote_data->work_mode]
+		     (remote_data, KEYDOMIAN), 1, 0);
+			auto_repeat_count++;
+	remote_data->repeat_release_code =
+			get_cur_key_domian
+			[remote_data->work_mode]
+			(remote_data , KEYDOMIAN);
+		remote_data->enable_repeat_falg = 1;
+		}
+	}
+
+	mod_timer(&remote_data->timer,
+	  jiffies +
+	  msecs_to_jiffies(remote_data->release_delay
+			   [remote_data->map_num]));
+
+	last_scan_code = remote_data->cur_lsbkeycode;
+	remote_data->cur_keycode = last_scan_code;
+	remote_data->cur_lsbkeycode = 0;
+	remote_data->timer.data = (unsigned long)remote_data;
+	return 0;
+}
+
+int remote_hw_nec_rca_2in1_report_key(struct remote *remote_data)
 {
 	static int last_scan_code;
 	int i;
@@ -1010,7 +1110,7 @@ int remote_hw_nec_rca_2in1_reprot_key(struct remote *remote_data)
 	return 0;
 }
 
-int remote_hw_nec_toshiba_2in1_reprot_key(struct remote *remote_data)
+int remote_hw_nec_toshiba_2in1_report_key(struct remote *remote_data)
 {
 	static int last_scan_code;
 	int i;
@@ -1102,7 +1202,7 @@ int remote_hw_nec_toshiba_2in1_reprot_key(struct remote *remote_data)
 		if (remote_data->repeat_enable) {
 			repeat_count++;
 			if (time_after(jiffies, remote_data->repeat_tick)) {
-				if (repeat_count > 1)
+				if (repeat_count > 3)
 					remote_data->remote_send_key
 					    (remote_data->input,
 					     remote_data->repeat_release_code,
@@ -1118,7 +1218,7 @@ int remote_hw_nec_toshiba_2in1_reprot_key(struct remote *remote_data)
 					  msecs_to_jiffies
 					  (remote_data->release_delay
 					   [remote_data->map_num]));
-			return -1;
+			/*return -1;*/
 		}
 		mod_timer(&remote_data->timer,
 			  jiffies +
@@ -1398,7 +1498,7 @@ static inline void kbd_software_mode_remote_sync(struct remote *remote_data)
 
 }
 
-int remote_sw_reprot_key(struct remote *remote_data)
+int remote_sw_report_key(struct remote *remote_data)
 {
 	int current_jiffies = jiffies;
 
@@ -1468,8 +1568,19 @@ void remote_duokan_report_release_key(struct remote *remote_data)
 		auto_repeat_count = 0;
 	}
 }
+void remote_rc6_report_release_key(struct remote *remote_data)
+{
+	if (remote_data->enable_repeat_falg) {
+		remote_data->remote_send_key(remote_data->input,
+					     remote_data->repeat_release_code,
+					     0, 0);
+		remote_data->enable_repeat_falg = 0;
 
-void remote_sw_reprot_release_key(struct remote *remote_data)
+		auto_repeat_count = 0;
+	}
+}
+
+void remote_sw_report_release_key(struct remote *remote_data)
 {
 	if (remote_data->enable_repeat_falg) {
 		remote_data->remote_send_key(remote_data->input,
@@ -1500,8 +1611,79 @@ void remote_nec_toshiba_2in1_report_release_key(struct remote *remote_data)
 
 	}
 }
+int remote_hw_nec_rcmm_2in1_report_key(struct remote *remote_data)
+{
+	static int last_scan_code;
+	int i;
+	get_cur_scancode(remote_data);
+	get_cur_scanstatus(remote_data);
+	input_dbg("rcmm-%d-0x%08x\n", auto_repeat_count,
+					remote_data->cur_lsbkeycode);
+	if (!auto_repeat_count) {
+		if (remote_data->cur_lsbkeycode) {	/*key first press */
+			if (remote_data->ig_custom_enable) {
+				for (i = 0; i < ARRAY_SIZE
+					(remote_data->custom_code);) {
+					if (remote_data->custom_code[i] !=
+						get_cur_key_domian
+						[remote_data->temp_work_mode]
+						(remote_data, CUSTOMDOMAIN)) {
+						/*return -1; */
+						i++;
+					} else {
+						remote_data->map_num = i;
+						break;
+					}
+					if (i == ARRAY_SIZE
+						(remote_data->custom_code)) {
+						input_dbg
+						("Wrong custom code 0x%08x\n",
+						remote_data->cur_lsbkeycode);
+						return -1;
+				}
+			}
+		}
 
-void remote_null_reprot_release_key(struct remote *remote_data)
+	remote_data->remote_send_key(remote_data->input,
+		     get_cur_key_domian
+		     [remote_data->temp_work_mode]
+		     (remote_data, KEYDOMIAN), 1, 0);
+			auto_repeat_count++;
+	remote_data->repeat_release_code =
+			get_cur_key_domian
+			[remote_data->temp_work_mode]
+			(remote_data , KEYDOMIAN);
+		remote_data->enable_repeat_falg = 1;
+		}
+	}
+
+	mod_timer(&remote_data->timer,
+	  jiffies +
+	  msecs_to_jiffies(remote_data->release_delay
+			   [remote_data->map_num]));
+
+	last_scan_code = remote_data->cur_lsbkeycode;
+	remote_data->cur_keycode = last_scan_code;
+	remote_data->cur_lsbkeycode = 0;
+	remote_data->timer.data = (unsigned long)remote_data;
+	return 0;
+}
+void remote_nec_rcmm_2in1_report_release_key(struct remote *remote_data)
+{
+	if (remote_data->enable_repeat_falg) {
+		remote_data->remote_send_key(remote_data->input,
+			remote_data->repeat_release_code, 0, 0);
+		remote_data->enable_repeat_falg = 0;
+		/*am_remote_write_reg(OPERATION_CTRL_REG1,0x9f40);*/
+		auto_repeat_count = 0;
+	}
+	input_dbg("status reg:0x%08x|Framedata:0x%08x\n",
+		am_remote_read_reg(DURATION_REG1_AND_STATUS),
+		am_remote_read_reg(FRAME_BODY));
+}
+
+
+void remote_null_report_release_key(struct remote *remote_data)
 {
 
 }

@@ -25,6 +25,9 @@
 #include "clk.h"
 #include "clk-pll.h"
 #include <linux/amlogic/cpu_version.h>
+#undef pr_fmt
+#define pr_fmt(fmt) "gxbb_hdmi_clk: " fmt
+
 #undef DEBUG
 /* #define DEBUG */
 #ifndef DEBUG
@@ -34,7 +37,7 @@
 #define to_hdmi_clk(_hw) container_of(_hw, struct hdmi_clock, hw)
 static void __iomem *hiu_base;
 
-void hdmi_update_bits(unsigned int reg, unsigned int mask,
+static void hdmi_update_bits(unsigned int reg, unsigned int mask,
 					unsigned int val)
 {
 	unsigned int tmp, orig;
@@ -320,7 +323,7 @@ static struct amlogic_pll_clock hdmi_plls[]  = {
 #define od3_shift 18
 #define od3_mask 0x3
 
-size_t cal_rate(unsigned int div, unsigned long parent_rate)
+static size_t cal_rate(unsigned int div, unsigned long parent_rate)
 {
 	size_t rate = -1;
 	switch (div) {
@@ -556,7 +559,8 @@ static struct cts_encx_table cts_encp_tbl[] = {
 
 static struct cts_encx_table cts_enci_tbl[] = {
 	CTS_XXX_TBL(54000, 432000, 4, 2),
-	CTS_XXX_TBL(27000, 432000, 4, 1),
+	CTS_XXX_TBL(27000, 54000, 1, 2),
+	CTS_XXX_TBL(27000, 216000, 4, 2),
 };
 static struct cts_encx_table cts_pixel_tbl[] = {
 	CTS_XXX_TBL(594000, 594000, 1, 1),

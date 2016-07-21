@@ -28,7 +28,7 @@
 #include "vinfo.h"
 
 struct vout_op_s {
-	const struct vinfo_s* (*get_vinfo)(void);
+	struct vinfo_s* (*get_vinfo)(void);
 	int (*set_vmode)(enum vmode_e);
 	enum vmode_e (*validate_vmode)(char *);
 	int (*vmode_is_supported)(enum vmode_e);
@@ -56,12 +56,21 @@ extern int vout_register_server(struct vout_server_s *);
 extern int vout_unregister_server(struct vout_server_s *);
 extern int vout_notifier_call_chain(unsigned long, void *);
 
-extern const struct vinfo_s *get_current_vinfo(void);
+extern struct vinfo_s *get_current_vinfo(void);
 extern enum vmode_e get_current_vmode(void);
 extern int set_current_vmode(enum vmode_e);
 extern enum vmode_e validate_vmode(char *);
 extern int set_vframe_rate_hint(int);
 extern int set_vframe_rate_end_hint(void);
+
+/* adc/dac ref signal,
+ * module index: atv demod:0x01; dtv demod:0x02; tvafe:0x4; dac:0x8
+*/
+extern void ana_ref_cntl0_bit9(bool on, unsigned int module_sel);
+/* dac out ctl,
+ * module index: atv demod:0x01; dtv demod:0x02; tvafe:0x4; dac:0x8
+*/
+extern void vdac_out_cntl1_bit3(bool on, unsigned int module_sel);
 
 #ifdef CONFIG_AML_VOUT_FRAMERATE_AUTOMATION
 extern void update_vmode_status(char *name);
@@ -77,6 +86,7 @@ extern int get_power_level(void);
 #define VOUT_EVENT_OSD_BLANK           0x00020000
 #define VOUT_EVENT_OSD_DISP_AXIS       0x00030000
 #define VOUT_EVENT_OSD_PREBLEND_ENABLE 0x00040000
+#define VOUT_EVENT_MODE_CHANGE_PRE     0x00050000
 
 /* vout2 */
 extern int vout2_register_client(struct notifier_block *);

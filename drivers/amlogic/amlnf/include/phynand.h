@@ -67,7 +67,9 @@ struct nand_page0_info_t {
 	unsigned pages_in_block;
 	unsigned secure_block;
 	unsigned ce_mask;
-	unsigned reserved[3];
+	unsigned boot_num;
+	unsigned each_boot_pages;
+	unsigned reserved[2];
 };
 
 /* read from page0, override default. */
@@ -144,6 +146,7 @@ union nand_core_clk_t {
 #define	KEY_INFO_HEAD_MAGIC		"nkey"
 #define	SECURE_INFO_HEAD_MAGIC		"nsec"
 #define	ENV_INFO_HEAD_MAGIC		"nenv"
+#define PHY_PARTITION_HEAD_MAGIC	"phyp"
 #define	DTD_INFO_HEAD_MAGIC		"ndtb"
 
 #define	FBBT_COPY_NUM	1
@@ -722,6 +725,13 @@ struct dev_para {
 	unsigned int option;
 };
 
+struct _phy_partition {
+	const char name[MAX_DEVICE_NAME_LEN];
+	uint64_t phy_off;
+	uint64_t phy_len;
+	uint64_t logic_len;
+};
+
 #define MAX_PART_NUM	16
 #define PART_NAME_LEN 16
 struct partitions {
@@ -743,6 +753,12 @@ struct nand_config {
 	unsigned int driver_version;
 	unsigned char dev_num;
 	unsigned short fbbt_blk_addr;
+};
+
+struct phy_partition_info {
+	unsigned int crc;
+	struct _phy_partition partition[MAX_DEVICE_NUM];
+	unsigned char dev_num;
 };
 
 struct nand_bbt {
@@ -811,6 +827,7 @@ struct amlnand_chip {
 
 	struct nand_arg_info config_msg;
 	struct nand_config *config_ptr;
+	struct phy_partition_info *phy_part_ptr;
 
 	struct nand_arg_info nand_bbtinfo;
 	struct nand_arg_info shipped_bbtinfo;
@@ -819,6 +836,7 @@ struct amlnand_chip {
 	struct nand_arg_info nand_key;
 	struct nand_arg_info nand_secure;
 	struct nand_arg_info uboot_env;
+	struct nand_arg_info nand_phy_partition;
 #if (AML_CFG_DTB_RSV_EN)
 	struct nand_arg_info amlnf_dtb;
 #endif
@@ -890,6 +908,8 @@ extern int aml_secure_init(struct amlnand_chip *aml_chip);
 extern int amlnf_dtb_init(struct amlnand_chip *aml_chip);
 extern int amlnf_dtb_reinit(struct amlnand_chip *aml_chip);
 #endif
+
+extern unsigned int aml_info_checksum(unsigned char *data, int lenth);
 extern int amlnand_info_init(struct amlnand_chip *aml_chip,
 	unsigned char *info,
 	unsigned char *buf,

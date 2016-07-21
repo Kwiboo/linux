@@ -1,14 +1,19 @@
 /*
- *  linux/drivers/mmc/core/mmc.c
+ * drivers/mmc/core/mmc.c
  *
- *  Copyright (C) 2003-2004 Russell King, All Rights Reserved.
- *  Copyright (C) 2005-2007 Pierre Ossman, All Rights Reserved.
- *  MMCv4 support Copyright (C) 2006 Philip Langdale, All Rights Reserved.
+ * Copyright (C) 2015 Amlogic, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- */
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+*/
 
 #include <linux/err.h>
 #include <linux/slab.h>
@@ -390,6 +395,12 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 		}
 	}
 
+	/* device life time estimate type A/B */
+	card->ext_csd.raw_dev_lifetime_est_typ_a =
+		ext_csd[EXT_CSD_DEV_LIFETIME_EST_TYP_A];
+	card->ext_csd.raw_dev_lifetime_est_typ_b =
+		ext_csd[EXT_CSD_DEV_LIFETIME_EST_TYP_B];
+
 	card->ext_csd.raw_hc_erase_gap_size =
 		ext_csd[EXT_CSD_HC_WP_GRP_SIZE];
 	card->ext_csd.raw_sec_trim_mult =
@@ -707,6 +718,13 @@ MMC_DEV_ATTR(serial, "0x%08x\n", card->cid.serial);
 MMC_DEV_ATTR(enhanced_area_offset, "%llu\n",
 		card->ext_csd.enhanced_area_offset);
 MMC_DEV_ATTR(enhanced_area_size, "%u\n", card->ext_csd.enhanced_area_size);
+MMC_DEV_ATTR(raw_erase_timeout_mult, "%d\n",
+		card->ext_csd.raw_erase_timeout_mult);
+MMC_DEV_ATTR(raw_sec_erase_mult, "%d\n", card->ext_csd.raw_sec_erase_mult);
+MMC_DEV_ATTR(dev_lifetime_est_typ_a, "0x%02x\n",
+		card->ext_csd.raw_dev_lifetime_est_typ_a);
+MMC_DEV_ATTR(dev_lifetime_est_typ_b, "0x%02x\n",
+		card->ext_csd.raw_dev_lifetime_est_typ_b);
 MMC_DEV_ATTR(raw_rpmb_size_mult, "%#x\n", card->ext_csd.raw_rpmb_size_mult);
 MMC_DEV_ATTR(rel_sectors, "%#x\n", card->ext_csd.rel_sectors);
 
@@ -725,6 +743,10 @@ static struct attribute *mmc_std_attrs[] = {
 	&dev_attr_serial.attr,
 	&dev_attr_enhanced_area_offset.attr,
 	&dev_attr_enhanced_area_size.attr,
+	&dev_attr_raw_sec_erase_mult.attr,
+	&dev_attr_raw_erase_timeout_mult.attr,
+	&dev_attr_dev_lifetime_est_typ_a.attr,
+	&dev_attr_dev_lifetime_est_typ_b.attr,
 	&dev_attr_raw_rpmb_size_mult.attr,
 	&dev_attr_rel_sectors.attr,
 	NULL,
@@ -1057,12 +1079,6 @@ static int mmc_select_hs400(struct mmc_card *card)
 
 	mmc_set_timing(host, MMC_TIMING_MMC_HS400);
 	mmc_set_bus_speed(card);
-	mmc_host_clk_hold(host);
-	err = host->ops->execute_tuning(host, MMC_SEND_TUNING_BLOCK_HS200);
-	mmc_host_clk_release(host);
-
-	if (err)
-		return err;
 
 	return 0;
 }

@@ -91,43 +91,45 @@ static  irqreturn_t (*remote_bridge_sw_isr[])(int irq, void *dev_id) = {
 };
 #endif
 static  int (*remote_report_key[])(struct remote *remote_data) = {
-	remote_hw_reprot_key,
-	remote_duokan_reprot_key,
-	remote_hw_reprot_null_key,
-	remote_hw_reprot_null_key,
-	remote_hw_reprot_null_key,
-	remote_hw_reprot_null_key,
-	remote_hw_reprot_null_key,
-	remote_hw_reprot_null_key,
-	remote_hw_reprot_null_key,
-	remote_hw_reprot_null_key,
-	remote_hw_reprot_null_key,
-	remote_hw_reprot_null_key,
-	remote_hw_reprot_null_key,
-	remote_hw_reprot_null_key,
-	remote_hw_nec_rca_2in1_reprot_key,
-	remote_hw_nec_toshiba_2in1_reprot_key,
-	remote_sw_reprot_key
+	remote_hw_report_key,
+	remote_duokan_report_key,
+	remote_hw_report_null_key,
+	remote_hw_report_null_key,
+	remote_hw_report_null_key,
+	remote_hw_report_null_key,
+	remote_hw_report_null_key,
+	remote_hw_report_null_key,
+	remote_rc6_report_key,
+	remote_hw_report_null_key,
+	remote_hw_report_null_key,
+	remote_hw_report_null_key,
+	remote_hw_report_null_key,
+	remote_hw_report_null_key,
+	remote_hw_nec_rca_2in1_report_key,
+	remote_hw_nec_toshiba_2in1_report_key,
+	remote_hw_nec_rcmm_2in1_report_key,
+	remote_sw_report_key
 };
 
 static  void (*remote_report_release_key[])(struct remote *remote_data) = {
 	remote_nec_report_release_key,
 	remote_duokan_report_release_key,
-	remote_null_reprot_release_key,
-	remote_null_reprot_release_key,
-	remote_null_reprot_release_key,
-	remote_null_reprot_release_key,
-	remote_null_reprot_release_key,
-	remote_null_reprot_release_key,
-	remote_null_reprot_release_key,
-	remote_null_reprot_release_key,
-	remote_null_reprot_release_key,
-	remote_null_reprot_release_key,
-	remote_null_reprot_release_key,
-	remote_null_reprot_release_key,
+	remote_null_report_release_key,
+	remote_null_report_release_key,
+	remote_null_report_release_key,
+	remote_null_report_release_key,
+	remote_null_report_release_key,
+	remote_null_report_release_key,
+	remote_rc6_report_release_key,
+	remote_null_report_release_key,
+	remote_null_report_release_key,
+	remote_null_report_release_key,
+	remote_null_report_release_key,
+	remote_null_report_release_key,
 	remote_nec_rca_2in1_report_release_key,
 	remote_nec_toshiba_2in1_report_release_key,
-	remote_sw_reprot_release_key
+	remote_nec_rcmm_2in1_report_release_key,
+	remote_sw_report_release_key
 };
 static __u16 mouse_map[20][6];
 int remote_printk(const char *fmt, ...)
@@ -264,7 +266,7 @@ void remote_send_key(struct input_dev *dev, unsigned int scancode,
 			return;
 		}
 
-		if (type == 2 && scancode == 0x1a &&
+		if (type == 2 &&
 			key_map[gp_remote->map_num][scancode] == 0x0074)
 			return;
 		else {
@@ -874,6 +876,13 @@ static int remote_resume(struct platform_device *pdev)
 			input_event(gp_remote->input, EV_KEY, KEY_POWER, 1);
 			input_sync(gp_remote->input);
 			input_event(gp_remote->input, EV_KEY, KEY_POWER, 0);
+			input_sync(gp_remote->input);
+		}
+
+		if (get_resume_method() == REMOTE_CUS_WAKEUP) {
+			input_event(gp_remote->input, EV_KEY, 133, 1);
+			input_sync(gp_remote->input);
+			input_event(gp_remote->input, EV_KEY, 133, 0);
 			input_sync(gp_remote->input);
 		}
 	}

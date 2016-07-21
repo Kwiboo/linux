@@ -432,7 +432,7 @@ int amlogic_pin_config_group_set(struct pinctrl_dev *pctldev,
 	struct meson_domain *domain;
 	struct meson_bank *bank;
 	if (AML_PCON_PULLUP == pullparam) {
-		for (i = 0; i < num_pins; i++)
+		for (i = 0; i < num_pins; i++) {
 			ret = meson_get_domain_and_bank(apmx, pins[i],
 							&domain, &bank);
 			if (ret)
@@ -441,6 +441,7 @@ int amlogic_pin_config_group_set(struct pinctrl_dev *pctldev,
 						  domain, bank, config);
 			if (ret)
 				return ret;
+		}
 	}
 	if (AML_PCON_ENOUT == oenparam) {
 		for (i = 0; i < num_pins; i++) {
@@ -1110,7 +1111,7 @@ int  amlogic_pmx_probe(struct platform_device *pdev,
 {
 	struct amlogic_pmx *apmx;
 	int ret, val;
-	pr_info("Init pinux probe!\n");
+	dev_info(&pdev->dev, "Init pinux probe!\n");
 	apmx = devm_kzalloc(&pdev->dev, sizeof(*apmx), GFP_KERNEL);
 	if (!apmx) {
 		dev_err(&pdev->dev, "Can't alloc amlogic_pmx\n");

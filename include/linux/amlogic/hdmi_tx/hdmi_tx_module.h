@@ -64,11 +64,32 @@ struct rx_cap {
 	/*vendor*/
 	unsigned int IEEEOUI;
 	unsigned int HF_IEEEOUI;	/* For HDMI Forum */
+	/* CEA861-F, Table 56, Colorimetry Data Block */
+	unsigned int colorimetry_data;
 	unsigned int scdc_present:1;
 	unsigned int scdc_rr_capable:1; /* SCDC read request */
 	unsigned int lte_340mcsc_scramble:1;
+	unsigned int dc_y444:1;
+	unsigned int dc_30bit:1;
+	unsigned int dc_36bit:1;
+	unsigned int dc_48bit:1;
+	unsigned int dc_30bit_420:1;
+	unsigned int dc_36bit_420:1;
+	unsigned int dc_48bit_420:1;
+	unsigned int hdr_sup_eotf_sdr:1;
+	unsigned int hdr_sup_eotf_hdr:1;
+	unsigned int hdr_sup_eotf_smpte_st_2084:1;
+	unsigned int hdr_sup_eotf_future:1;
+	unsigned int hdr_sup_SMD_type1:1;
+	unsigned char hdr_lum_max;
+	unsigned char hdr_lum_avg;
+	unsigned char hdr_lum_min;
 	unsigned char ReceiverBrandName[4];
 	unsigned char ReceiverProductName[16];
+	unsigned char manufacture_week;
+	unsigned char manufacture_year;
+	unsigned char edid_version;
+	unsigned char edid_revision;
 	unsigned int ColorDeepSupport;
 	unsigned int Max_TMDS_Clock;
 	unsigned int Video_Latency;
@@ -134,7 +155,9 @@ struct hdmitx_dev {
 	struct delayed_work work_hpd_plugin;
 	struct delayed_work work_hpd_plugout;
 	struct work_struct work_internal_intr;
+#ifdef CONFIG_AML_HDMI_TX_14
 	struct delayed_work cec_work;
+#endif
 	struct timer_list hdcp_timer;
 	int hdcp_try_times;
 	/* -1, no hdcp; 0, NULL; 1, 1.4; 2, 2.2 */
@@ -149,8 +172,7 @@ struct hdmitx_dev {
 			unsigned char *HB);
 		void (*SetAudioInfoFrame)(unsigned char *AUD_DB,
 			unsigned char *CHAN_STAT_BUF);
-		int (*SetDispMode)(struct hdmitx_dev *hdmitx_device,
-			struct hdmitx_vidpara *param);
+		int (*SetDispMode)(struct hdmitx_dev *hdmitx_device);
 		int (*SetAudMode)(struct hdmitx_dev *hdmitx_device,
 			struct hdmitx_audpara *audio_param);
 		void (*SetupIRQ)(struct hdmitx_dev *hdmitx_device);
@@ -219,7 +241,11 @@ struct hdmitx_dev {
 	/* For some un-well-known TVs, no edid at all */
 	unsigned int tv_no_edid;
 	unsigned int hpd_lock;
-	unsigned int mode420;
+	struct hdmi_format_para *para;
+	/* 0: RGB444  1: Y444  2: Y422  3: Y420 */
+	enum hdmi_color_space colorspace;
+	/* 4: 24bit  5: 30bit  6: 36bit  7: 48bit */
+	enum hdmi_color_depth colordepth;
 	/* if equals to 1, means current video & audio output are blank */
 	unsigned int output_blank_flag;
 	unsigned int audio_notify_flag;
@@ -230,8 +256,10 @@ struct hdmitx_dev {
 	struct clk *clk_pixel;
 	struct clk *clk_phy;
 	struct clk *clk_vid;
-	unsigned int mode4k60hz420;
 	unsigned int gpio_i2c_enable;
+	/* configure for I2S: 8ch in, 2ch out */
+	/* 0: default setting  1:ch0/1  2:ch2/3  3:ch4/5  4:ch6/7 */
+	unsigned int aud_output_ch;
 };
 
 #define CMD_DDC_OFFSET          (0x10 << 24)
@@ -266,6 +294,7 @@ struct hdmitx_dev {
 #define DDC_HDCP_MUX_INIT	(CMD_DDC_OFFSET + 0x0e)
 #define DDC_HDCP_14_LSTORE	(CMD_DDC_OFFSET + 0x0f)
 #define DDC_HDCP_22_LSTORE	(CMD_DDC_OFFSET + 0x10)
+#define DDC_SCDC_DIV40_SCRAMB	(CMD_DDC_OFFSET + 0x20)
 
 /***********************************************************************
  *             CONFIG CONTROL //CntlConfig
@@ -281,6 +310,7 @@ struct hdmitx_dev {
 /* Audio part */
 #define CONF_CLR_AVI_PACKET     (CMD_CONF_OFFSET + 0x04)
 #define CONF_CLR_VSDB_PACKET    (CMD_CONF_OFFSET + 0x05)
+#define CONF_VIDEO_MAPPING	(CMD_CONF_OFFSET + 0x06)
 #define CONF_AUDIO_MUTE_OP      (CMD_CONF_OFFSET + 0x1000 + 0x00)
 #define AUDIO_MUTE          0x1
 #define AUDIO_UNMUTE        0x2
@@ -292,8 +322,9 @@ struct hdmitx_dev {
 #define MISC_HPD_MUX_OP         (CMD_MISC_OFFSET + 0x00)
 #define MISC_HPD_GPI_ST         (CMD_MISC_OFFSET + 0x02)
 #define MISC_HPLL_OP            (CMD_MISC_OFFSET + 0x03)
-#define HPLL_ENABLE         0x1
-#define HPLL_DISABLE        0x2
+#define		HPLL_ENABLE         0x1
+#define		HPLL_DISABLE        0x2
+#define		HPLL_SET	    0x3
 #define MISC_TMDS_PHY_OP        (CMD_MISC_OFFSET + 0x04)
 #define TMDS_PHY_ENABLE     0x1
 #define TMDS_PHY_DISABLE    0x2
@@ -335,6 +366,7 @@ struct hdmitx_dev {
 #define HDMI_AUDIO_INFO         4
 #define HDMI_AUDIO_CONTENT_PROTECTION   5
 #define HDMI_PACKET_HBR         6
+#define HDMI_PACKET_DRM		0x86
 
 #define HDMI_PROCESS_DELAY  msleep(10)
 /* reduce a little time, previous setting is 4000/10 */
@@ -366,6 +398,45 @@ extern void hdmitx_edid_buf_compare_print(struct hdmitx_dev *hdmitx_device);
 
 extern const char *hdmitx_edid_get_native_VIC(struct hdmitx_dev *hdmitx_device);
 
+/*
+ * HDMI Repeater TX I/F
+ * RX downstream Information from rptx to rprx
+*/
+/* send part raw edid from TX to RX */
+extern void rx_repeat_hpd_state(unsigned int st);
+/* prevent compile error in no HDMIRX case */
+void __attribute__((weak))rx_repeat_hpd_state(unsigned int st)
+{
+	pr_warn("not HDMI Repeater\n");
+}
+
+extern void rx_edid_physical_addr(unsigned char a, unsigned char b,
+	unsigned char c, unsigned char d);
+void __attribute__((weak))rx_edid_physical_addr(unsigned char a,
+	unsigned char b, unsigned char c, unsigned char d)
+{
+	pr_warn("not HDMI Repeater\n");
+}
+
+extern void rx_set_receiver_edid(unsigned char *data, int len);
+void __attribute__((weak))rx_set_receiver_edid(unsigned char *data, int len)
+{
+	pr_warn("not HDMI Repeater\n");
+}
+
+extern void rx_repeat_hdcp_ver(unsigned int ver);
+void __attribute__((weak))rx_repeat_hdcp_ver(unsigned int ver)
+{
+	pr_warn("not HDMI Repeater\n");
+}
+
+extern void rx_set_receive_hdcp(unsigned char *data, int len, int depth);
+void __attribute__((weak))rx_set_receive_hdcp(unsigned char *data, int len,
+	int depth)
+{
+	pr_warn("not HDMI Repeater\n");
+}
+
 extern int hdmitx_set_display(struct hdmitx_dev *hdmitx_device,
 	enum hdmi_vic VideoCode);
 
@@ -384,7 +455,7 @@ extern void hdmi_set_audio_para(int para);
 extern void hdmitx_output_rgb(void);
 
 extern int get_cur_vout_index(void);
-extern const struct vinfo_s *hdmi_get_current_vinfo(void);
+extern struct vinfo_s *hdmi_get_current_vinfo(void);
 #ifdef CONFIG_AML_VOUT_FRAMERATE_AUTOMATION
 extern enum fine_tune_mode_e get_hpll_tune_mode(void);
 extern void register_hdmi_edid_supported_func(int (*pfunc)(char *mode_name));

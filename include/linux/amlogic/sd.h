@@ -26,11 +26,12 @@
 
 #define	 AML_ERROR_RETRY_COUNTER		 10
 #define	 AML_TIMEOUT_RETRY_COUNTER	   2
-#define CALIBRATION
+#define AML_CALIBRATION
 #define AML_SDHC_MAGIC			 "amlsdhc"
 #define AML_SDIO_MAGIC			 "amlsdio"
 #define AML_SD_EMMC_MAGIC			 "amlsd_emmc"
 #define SD_EMMC_MANUAL_CMD23
+/* #define AML_RESP_WR_EXT */
 enum aml_mmc_waitfor {
 	XFER_INIT,			  /* 0 */
 	XFER_START,				/* 1 */
@@ -61,6 +62,18 @@ enum aml_host_status { /* Host controller status */
 	HOST_TASKLET_DATA,		/* 9 */
 };
 
+enum aml_host_bus_fsm { /* Host bus fsm status */
+	BUS_FSM_IDLE,			/* 0, idle */
+	BUS_FSM_SND_CMD,		/* 1, send cmd */
+	BUS_FSM_CMD_DONE,		/* 2, wait for cmd done */
+	BUS_FSM_RESP_START,		/* 3, resp start */
+	BUS_FSM_RESP_DONE,		/* 4, wait for resp done */
+	BUS_FSM_DATA_START,		/* 5, data start */
+	BUS_FSM_DATA_DONE,		/* 6, wait for data done */
+	BUS_FSM_DESC_WRITE_BACK,/* 7, wait for desc write back */
+	BUS_FSM_IRQ_SERVICE,	/* 8, wait for irq service */
+};
+
 struct amlsd_host;
 struct amlsd_platform {
 	struct amlsd_host *host;
@@ -79,7 +92,7 @@ struct amlsd_platform {
 	unsigned int caps;
 	unsigned int caps2;
 	unsigned int card_capacity;
-
+	unsigned char tx_phase;
 	unsigned int f_min;
 	unsigned int f_max;
 	unsigned int f_max_w;
@@ -112,9 +125,8 @@ struct amlsd_platform {
 	bool is_tuned;		/* if card has been tuning */
 	bool need_retuning;
 	struct delayed_work	retuning;
-#ifdef CALIBRATION
+#ifdef AML_CALIBRATION
 	unsigned char caling;
-	unsigned char need_cali;
 	unsigned char calout[20][20];
 #endif
 	/* we used this flag to filter
@@ -177,6 +189,14 @@ struct aml_emmc_adjust {
 	int clk_div;
 };
 
+struct aml_emmc_rxclk {
+	int rxclk_win_start;
+	int rxclk_win_len;
+	int rxclk_rx_phase;
+	int rxclk_rx_delay;
+	int rxclk_point;
+};
+
 struct amlsd_host {
 	/* back-link to device */
 	struct device *dev;
@@ -191,6 +211,10 @@ struct amlsd_host {
 	int			dma;
 	char *bn_buf;
 	dma_addr_t		bn_dma_buf;
+#ifdef AML_RESP_WR_EXT
+	u32 *resp_buf;
+	dma_addr_t resp_dma_buf;
+#endif
 	dma_addr_t		dma_gdesc; /* 0x200 */
 	dma_addr_t		dma_gping; /* 0x400 */
 	dma_addr_t		dma_gpong; /* 0x800 */
@@ -247,6 +271,7 @@ struct amlsd_host {
 	int	 port;
 	int	 locked;
 	bool	is_gated;
+	unsigned char sd_sdio_switch_volat_done;
 	/* unsigned int		ccnt, dcnt; */
 
 	int	 status; /* host status: xx_error/ok */
@@ -285,6 +310,7 @@ struct amlsd_host {
 	int		 version;
 	unsigned long	clksrc_rate;
 	struct aml_emmc_adjust emmc_adj;
+	struct aml_emmc_rxclk emmc_rxclk;
 	u32 error_flag;
 };
 
@@ -847,8 +873,8 @@ struct sd_emmc_regs {
 	u32 gdelay;	 /* 0x04 */
 	u32 gadjust;	/* 0x08 */
 	u32 reserved_0c;	   /* 0x0c */
-	u32 gcalout;	/* 0x10 */
-	u32 reserved_14[11];   /* 0x14~0x3c */
+	u32 gcalout[4];	/* 0x10~0x1c */
+	u32 reserved_20[8];   /* 0x20~0x3c */
 	u32 gstart;	 /* 0x40 */
 	u32 gcfg;	   /* 0x44 */
 	u32 gstatus;	/* 0x48 */
@@ -932,11 +958,17 @@ struct sd_emmc_adjust {
 	/*[14]	   1: test the rising edge.
 	0: test the falling edge. */
 	u32 cali_rise:1;
-	u32 reserved15:1;
+	/*[15]	   1: Sampling the DAT based on DS in HS400 mode.
+	0: Sampling the DAT based on RXCLK. */
+	u32 ds_enable:1;
 	 /*[21:16]	   Resample the input signals
 	when clock index==adj_delay. */
 	u32 adj_delay:6;
-	u32 reserved22:10;
+	/*[22]	   1: Use cali_dut first falling edge to adjust
+		the timing, set cali_enable to 1 to use this function.
+	0: no use adj auto. */
+	u32 adj_auto:1;
+	u32 reserved22:9;
 };
 struct sd_emmc_calout {
 	/*[5:0]	   Calibration reading.
@@ -1039,11 +1071,14 @@ struct sd_emmc_status {
 	u32 cmd_i:1;
 	/*[25]	  Input data strobe. */
 	u32 ds:1;
-	 /*[30:28]   BUS fsm */
-	u32 bus_fsm:1;
-	/*[31]	  Descriptor write back process is done
+	 /*[29:26]   BUS fsm */
+	u32 bus_fsm:4;
+	/*[30]	  Descriptor write back process is done
 	and it is ready for CPU to read.*/
 	u32 desc_wr_rdy:1;
+	/*[31]	  Core is busy,desc_busy or sd_emmc_irq
+	 *  or bus_fsm is not idle.*/
+	u32 core_wr_rdy:1;
 };
 struct sd_emmc_irq_en {
 	/*[7:0]	 RX data CRC error per wire.*/
@@ -1117,6 +1152,7 @@ struct sd_emmc_desc_info {
 #define SD_EMMC_IRQ_ALL					0x3fff
 #define SD_EMMC_RESP_SRAM_OFF					0
 /*#define SD_EMMC_DESC_SET_REG*/
+
 #define SD_EMMC_DESC_REG_CONF					0x4
 #define SD_EMMC_DESC_REG_IRQC					0xC
 #define SD_EMMC_DESC_RESP_STAT				0xfff80000
@@ -1190,7 +1226,7 @@ extern struct mmc_host *sdio_host;
 		pr_info("[%s] " fmt, __func__, ##args);
 
 #define print_dbg(fmt, args...) \
-	pr_info("[%s]\033[0;40;35m " fmt "\033[0m", __func__, ##args);
+	pr_info("[%s] " fmt , __func__, ##args);
 
 /* for external codec status, if using external codec,
 	jtag should not be set. */

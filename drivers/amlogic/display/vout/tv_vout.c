@@ -104,33 +104,33 @@ static int get_vdac_power_level(void)
 	return tv_vdac_power_level;
 }
 
+static int check_cpu_type(unsigned int cpu_type)
+{
+	int ret = 0;
+
+	ret = (get_meson_cpu_version(MESON_CPU_VERSION_LVL_MAJOR) == cpu_type);
+
+	return ret;
+}
+
+/* static int get_cpu_minor(void)
+* {
+*	return get_meson_cpu_version(MESON_CPU_VERSION_LVL_MINOR);
+* }
+*/
+
 static void set_tvmode_misc(enum tvmode_e mode)
 {
 	/* for hdmi mode, leave the hpll setting to be done by hdmi module. */
 	if ((get_cpu_type() == MESON_CPU_MAJOR_ID_M8) ||
 	    (get_cpu_type() == MESON_CPU_MAJOR_ID_M8M2) ||
-	    (get_cpu_type() == MESON_CPU_MAJOR_ID_GXBB)) {
+	    (get_cpu_type() == MESON_CPU_MAJOR_ID_GXBB) ||
+	    (get_cpu_type() == MESON_CPU_MAJOR_ID_GXL) ||
+	    (get_cpu_type() == MESON_CPU_MAJOR_ID_GXM)) {
 		if ((mode == TVMODE_480CVBS) || (mode == TVMODE_576CVBS))
 			set_vmode_clk(mode);
 	} else
 		set_vmode_clk(mode);
-}
-
-/*
- * uboot_display_already() uses to judge whether display has already
- * be set in uboot.
- * Here, first read the value of reg P_ENCP_VIDEO_MAX_PXCNT and
- * P_ENCP_VIDEO_MAX_LNCNT, then compare with value of tvregsTab[mode]
- */
-static int uboot_display_already(enum tvmode_e mode)
-{
-	enum tvmode_e source = TVMODE_MAX;
-
-	source = vmode_to_tvmode(get_logo_vmode());
-	if (source == mode)
-		return 1;
-	else
-		return 0;
 }
 
 static unsigned int vdac_cfg_valid = 0, vdac_cfg_value;
@@ -166,11 +166,16 @@ static void cvbs_config_vdac(unsigned int flag, unsigned int cfg)
 static void cvbs_cntl_output(unsigned int open)
 {
 	unsigned int cntl0 = 0, cntl1 = 0;
+
 	if (open == 0) { /* close */
 		cntl0 = 0;
 		cntl1 = 8;
 		tv_out_hiu_write(HHI_VDAC_CNTL0, cntl0);
 		tv_out_hiu_write(HHI_VDAC_CNTL1, cntl1);
+
+		/* must enable adc bandgap, the adc ref signal for demod */
+		ana_ref_cntl0_bit9(0, 0x8);
+		vdac_out_cntl1_bit3(0, 0x8);
 	} else if (open == 1) { /* open */
 		cntl0 = 0x1;
 		cntl1 = (vdac_cfg_valid == 0) ? 0 : vdac_cfg_value;
@@ -178,6 +183,10 @@ static void cvbs_cntl_output(unsigned int open)
 			      vdac_cfg_valid, cntl0, cntl1);
 		tv_out_hiu_write(HHI_VDAC_CNTL1, cntl1);
 		tv_out_hiu_write(HHI_VDAC_CNTL0, cntl0);
+
+		/* must enable adc bandgap, the adc ref signal for demod */
+		ana_ref_cntl0_bit9(1, 0x8);
+		vdac_out_cntl1_bit3(1, 0x8);
 	}
 	return;
 }
@@ -218,13 +227,21 @@ static void cvbs_performance_enhancement(enum tvmode_e mode)
 			/ sizeof(struct reg_s *);
 		index = (index >= max) ? 0 : index;
 		s = tvregs_576cvbs_performance_m8[index];
-		type = 0;
-	} else if (is_meson_gxbb_cpu()) {
+		type = 3;
+	} else if ((check_cpu_type(MESON_CPU_MAJOR_ID_GXBB)) ||
+			   (check_cpu_type(MESON_CPU_MAJOR_ID_GXL)) ||
+			   (check_cpu_type(MESON_CPU_MAJOR_ID_GXM))) {
 		max = sizeof(tvregs_576cvbs_performance_gxbb)
 			/ sizeof(struct reg_s *);
 		index = (index >= max) ? 0 : index;
 		s = tvregs_576cvbs_performance_gxbb[index];
-		type = 0;
+		type = 4;
+	} else if (check_cpu_type(MESON_CPU_MAJOR_ID_GXTVBB)) {
+		max = sizeof(tvregs_576cvbs_performance_gxtvbb)
+			/ sizeof(struct reg_s *);
+		index = (index >= max) ? 0 : index;
+		s = tvregs_576cvbs_performance_gxtvbb[index];
+		type = 5;
 	}
 
 	vout_log_info("cvbs performance type = %d, table = %d\n", type, index);
@@ -282,7 +299,12 @@ static void tv_out_init_off(enum tvmode_e mode)
 		    (mode == TVMODE_1080P_24HZ) || (mode == TVMODE_4K2K_24HZ) ||
 		    (mode == TVMODE_4K2K_25HZ) || (mode == TVMODE_4K2K_30HZ) ||
 		    (mode == TVMODE_4K2K_FAKE_5G) ||
-		    (mode == TVMODE_4K2K_SMPTE) || (mode == TVMODE_4K2K_60HZ))
+		    (mode == TVMODE_4K2K_SMPTE) ||
+		    (mode == TVMODE_4K2K_SMPTE_25HZ) ||
+		    (mode == TVMODE_4K2K_SMPTE_30HZ) ||
+		    (mode == TVMODE_4K2K_SMPTE_50HZ) ||
+		    (mode == TVMODE_4K2K_SMPTE_60HZ) ||
+		    (mode == TVMODE_4K2K_60HZ))
 			/* vout_cbus_set_bits(HHI_VID_PLL_CNTL, 0x0, 30, 1); */
 			/* vout_cbus_set_bits(HHI_VID_PLL_CNTL, 0x0, 30, 1); */
 		cvbs_cntl_output(0);
@@ -473,7 +495,6 @@ static char *tv_out_bist_str[] = {
 int tv_out_setmode(enum tvmode_e mode)
 {
 	const struct tvinfo_s *tvinfo;
-	static int uboot_display_flag = 1;
 	int ret;
 
 	if (mode >= TVMODE_MAX) {
@@ -488,15 +509,6 @@ int tv_out_setmode(enum tvmode_e mode)
 		return 0;
 	}
 	vout_log_info("TV mode %s selected.\n", tvinfo->id);
-
-	if (uboot_display_flag) {
-		uboot_display_flag = 0;
-		if (uboot_display_already(mode)) {
-			vout_log_info("already display in uboot\n");
-			mutex_unlock(&setmode_mutex);
-			return 0;
-		}
-	}
 
 	tv_out_pre_close_vdac(mode);
 
@@ -541,7 +553,7 @@ static const struct file_operations am_tv_fops = {
 
 static const struct vinfo_s *get_valid_vinfo(char  *mode)
 {
-	const struct vinfo_s *vinfo = NULL;
+	struct vinfo_s *vinfo = NULL;
 	int  i, count = ARRAY_SIZE(tv_info);
 	int mode_name_len = 0;
 	for (i = 0; i < count; i++) {
@@ -554,10 +566,12 @@ static const struct vinfo_s *get_valid_vinfo(char  *mode)
 			}
 		}
 	}
+	if (vinfo)
+		strncpy(vinfo->ext_name, mode, strlen(mode));
 	return vinfo;
 }
 
-static const struct vinfo_s *tv_get_current_info(void)
+static struct vinfo_s *tv_get_current_info(void)
 {
 	return info->vinfo;
 }
@@ -596,11 +610,18 @@ static int want_hdmi_mode(enum vmode_e mode)
 	    || (mode == VMODE_1080I_50HZ)
 	    || (mode == VMODE_1080P)
 	    || (mode == VMODE_1080P_50HZ)
+	    || (mode == VMODE_1080P_30HZ)
 	    || (mode == VMODE_1080P_24HZ)
 	    || (mode == VMODE_4K2K_24HZ)
 	    || (mode == VMODE_4K2K_25HZ)
 	    || (mode == VMODE_4K2K_30HZ)
 	    || (mode == VMODE_4K2K_SMPTE)
+	    || (mode == VMODE_4K2K_SMPTE_25HZ)
+	    || (mode == VMODE_4K2K_SMPTE_30HZ)
+	    || (mode == VMODE_4K2K_SMPTE_50HZ)
+	    || (mode == VMODE_4K2K_SMPTE_60HZ)
+	    || (mode == VMODE_4K2K_SMPTE_50HZ_Y420)
+	    || (mode == VMODE_4K2K_SMPTE_60HZ_Y420)
 	    || (mode == VMODE_4K2K_FAKE_5G)
 	    || (mode == VMODE_4K2K_5G)
 	    || (mode == VMODE_4K2K_50HZ)
@@ -633,7 +654,7 @@ static void fps_auto_adjust_mode(enum vmode_e *pmode)
 static enum fine_tune_mode_e fine_tune_mode = KEEP_HPLL;
 #endif
 
-static int is_enci_required(enum vmode_e mode)
+static int tv_out_enci_is_required(enum vmode_e mode)
 {
 	if ((mode == VMODE_576I) ||
 		(mode == VMODE_576I_RPT) ||
@@ -647,55 +668,81 @@ static int is_enci_required(enum vmode_e mode)
 
 static void vout_change_mode_preprocess(enum vmode_e vmode_new)
 {
-	if (!is_enci_required(vmode_new))
+	if (!tv_out_enci_is_required(vmode_new))
 		tv_out_hiu_setb(HHI_VID_CLK_CNTL2, 0, ENCI_GATE_VCLK, 1);
 
 	return;
 }
 
+#ifdef CONFIG_AML_VPU
+static void tv_out_vpu_power_ctrl(int status)
+{
+	int vpu_mod;
+
+	if (get_cpu_type() < MESON_CPU_MAJOR_ID_M8)
+		return;
+
+	if (info->vinfo == NULL)
+		return;
+	vpu_mod = tv_out_enci_is_required(info->vinfo->mode);
+	vpu_mod = (vpu_mod) ? VPU_VENCI : VPU_VENCP;
+	if (status) {
+		request_vpu_clk_vmod(info->vinfo->video_clk, vpu_mod);
+		switch_vpu_mem_pd_vmod(vpu_mod, VPU_MEM_POWER_ON);
+	} else {
+		switch_vpu_mem_pd_vmod(vpu_mod, VPU_MEM_POWER_DOWN);
+		release_vpu_clk_vmod(vpu_mod);
+	}
+}
+#endif
+
 static int tv_set_current_vmode(enum vmode_e mode)
 {
-	if ((mode & VMODE_MODE_BIT_MASK) > VMODE_MAX)
+	enum vmode_e tvmode;
+
+	tvmode = mode & VMODE_MODE_BIT_MASK;
+	if (tvmode > VMODE_MAX)
 		return -EINVAL;
 #ifdef CONFIG_AML_VOUT_FRAMERATE_AUTOMATION
 	/*
 	 * if plug hdmi during fps (stream is playing)
 	 * then adjust mode to fps vmode
 	 */
-	if (!want_hdmi_mode(mode)) {
+	if (!want_hdmi_mode(tvmode)) {
 		if (DOWN_HPLL == fine_tune_mode)
 			update_tv_info_duration(fps_target_mode, UP_HPLL);
 	}
-	fps_auto_adjust_mode(&mode);
-	update_vmode_status(get_name_from_vmode(mode));
+	fps_auto_adjust_mode(&tvmode);
+	update_vmode_status(get_name_from_vmode(tvmode));
 	vout_log_info("%s[%d]fps_target_mode=%d\n",
-		      __func__, __LINE__, mode);
+		      __func__, __LINE__, tvmode);
 
-	info->vinfo = update_tv_info_duration(mode, fine_tune_mode);
+	info->vinfo = update_tv_info_duration(tvmode, fine_tune_mode);
 #else
-	info->vinfo = get_tv_info(mode & VMODE_MODE_BIT_MASK);
+	info->vinfo = get_tv_info(tvmode);
 #endif
 	if (!info->vinfo) {
-		vout_log_info("don't get tv_info, mode is %d\n", mode);
+		vout_log_info("don't get tv_info, mode is %d\n", tvmode);
 		return 1;
 	}
 	vout_log_info("mode is %d,sync_duration_den=%d,sync_duration_num=%d\n",
-		      mode, info->vinfo->sync_duration_den,
+		      tvmode, info->vinfo->sync_duration_den,
 		      info->vinfo->sync_duration_num);
-	if (mode & VMODE_LOGO_BIT_MASK)
-		return 0;
 
-	vout_change_mode_preprocess(mode);
+	vout_change_mode_preprocess(tvmode);
 
 #ifdef CONFIG_AML_VPU
-	switch_vpu_mem_pd_vmod(info->vinfo->mode, VPU_MEM_POWER_ON);
-	request_vpu_clk_vmod(info->vinfo->video_clk, info->vinfo->mode);
+	tv_out_vpu_power_ctrl(1);
 #endif
 	tv_out_reg_write(VPP_POSTBLEND_H_SIZE, info->vinfo->width);
-	tv_out_setmode(vmode_to_tvmode(mode));
+	if (mode & VMODE_INIT_BIT_MASK) {
+		vout_log_info("already display in uboot\n");
+		return 0;
+	}
+	tv_out_setmode(vmode_to_tvmode(tvmode));
 
 #ifdef CONFIG_AML_VOUT_FRAMERATE_AUTOMATION
-	vout_log_info("new mode =%s set ok\n", get_name_from_vmode(mode));
+	vout_log_info("new mode =%s set ok\n", get_name_from_vmode(tvmode));
 #endif
 
 	return 0;
@@ -724,10 +771,7 @@ static int tv_module_disable(enum vmode_e cur_vmod)
 		return 0;
 
 #ifdef CONFIG_AML_VPU
-	if (info->vinfo) {
-		release_vpu_clk_vmod(info->vinfo->mode);
-		switch_vpu_mem_pd_vmod(info->vinfo->mode, VPU_MEM_POWER_DOWN);
-	}
+	tv_out_vpu_power_ctrl(0);
 #endif
 	/* video_dac_disable(); */
 	return 0;
@@ -808,12 +852,14 @@ static enum fine_tune_mode_e get_fine_tune_mode(
 	switch (mode) {
 	case VMODE_720P:
 	case VMODE_1080P:
+	case VMODE_1080P_30HZ:
 	case VMODE_1080P_24HZ:
 	case VMODE_1080I:
 	case VMODE_4K2K_30HZ:
 	case VMODE_4K2K_24HZ:
 	case VMODE_4K2K_60HZ:
 	case VMODE_4K2K_60HZ_Y420:
+	case VMODE_4K2K_SMPTE_60HZ_Y420:
 		if ((fr_vsource == 2397) || (fr_vsource == 2997)
 			|| (fr_vsource == 5994))
 			tune_mode = DOWN_HPLL;
@@ -932,7 +978,9 @@ static struct vinfo_s *update_tv_info_duration(
 			|| (target_vmode == VMODE_1080I)
 			|| (target_vmode == VMODE_1080P)
 			|| (target_vmode == VMODE_4K2K_60HZ)
-			|| (target_vmode == VMODE_4K2K_60HZ_Y420)) {
+			|| (target_vmode == VMODE_4K2K_SMPTE_60HZ)
+			|| (target_vmode == VMODE_4K2K_60HZ_Y420)
+			|| (target_vmode == VMODE_4K2K_SMPTE_60HZ_Y420)) {
 			vinfo->sync_duration_den = 1001;
 			vinfo->sync_duration_num = 60000;
 		} else if ((target_vmode == VMODE_1080P_24HZ)
@@ -955,7 +1003,9 @@ static struct vinfo_s *update_tv_info_duration(
 			|| (target_vmode == VMODE_1080I)
 			|| (target_vmode == VMODE_1080P)
 			|| (target_vmode == VMODE_4K2K_60HZ)
-			|| (target_vmode == VMODE_4K2K_60HZ_Y420)) {
+			|| (target_vmode == VMODE_4K2K_SMPTE_60HZ)
+			|| (target_vmode == VMODE_4K2K_60HZ_Y420)
+			|| (target_vmode == VMODE_4K2K_SMPTE_60HZ_Y420)) {
 			vinfo->sync_duration_den = 1;
 			vinfo->sync_duration_num = 60;
 		} else if ((target_vmode == VMODE_1080P_24HZ)
@@ -1559,7 +1609,7 @@ static struct syscore_ops tvconf_ops = {
 };
 #endif
 
-static int __init tv_init_module(void)
+static int tvout_probe(struct platform_device *pdev)
 {
 	int  ret;
 #ifdef CONFIG_INSTABOOT
@@ -1583,12 +1633,15 @@ static int __init tv_init_module(void)
 	else
 		vout_log_info("register tv module server ok\n");
 	create_tv_attr(info);
+
+	vout_log_info("%s OK\n", __func__);
 	return 0;
 }
 
-static __exit void tv_exit_module(void)
+static int tvout_remove(struct platform_device *pdev)
 {
 	int i;
+
 	if (info->base_class) {
 		for (i = 0; i < ARRAY_SIZE(tv_attr); i++)
 			class_remove_file(info->base_class, tv_attr[i]);
@@ -1599,12 +1652,51 @@ static __exit void tv_exit_module(void)
 		kfree(info);
 	}
 	vout_unregister_server(&tv_server);
-	vout_log_info("exit tv module\n");
+	vout_log_info("%s\n", __func__);
+	return 0;
+}
+
+#ifdef CONFIG_OF
+static const struct of_device_id tvout_dt_match[] = {
+	{
+		.compatible = "amlogic, tvout",
+	},
+	{},
+};
+#endif
+
+static struct platform_driver tvout_driver = {
+	.probe = tvout_probe,
+	.remove = tvout_remove,
+	.driver = {
+		.name = "tvout",
+		.owner = THIS_MODULE,
+#ifdef CONFIG_OF
+		.of_match_table = tvout_dt_match,
+#endif
+	},
+};
+
+static int __init tv_init_module(void)
+{
+	/* vout_log_info("%s module init\n", __func__); */
+	if (platform_driver_register(&tvout_driver)) {
+		vout_log_err("%s failed to register module\n", __func__);
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+static __exit void tv_exit_module(void)
+{
+	/* vout_log_info("%s module exit\n", __func__); */
+	platform_driver_unregister(&tvout_driver);
 }
 
 static int __init vdac_config_bootargs_setup(char *line)
 {
-	unsigned int cfg = 0x00;
+	unsigned long cfg = 0x0;
 	int ret = 0;
 	vout_log_info("cvbs trimming line = %s\n", line);
 	ret = kstrtoul(line, 16, (unsigned long *)&cfg);
@@ -1616,7 +1708,7 @@ __setup("vdaccfg=", vdac_config_bootargs_setup);
 
 static int __init cvbs_performance_setup(char *line)
 {
-	unsigned int cfg = 0x1;
+	unsigned long cfg = 0x0;
 	int ret = 0;
 	vout_log_info("cvbs performance line = %s\n", line);
 	ret = kstrtoul(line, 10, (unsigned long *)&cfg);

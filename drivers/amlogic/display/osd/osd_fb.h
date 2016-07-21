@@ -22,6 +22,7 @@
 /* Linux Headers */
 #include <linux/list.h>
 #include <linux/fb.h>
+#include <linux/types.h>
 
 /* Amlogic Headers */
 #include <linux/amlogic/vout/vinfo.h>
@@ -41,9 +42,12 @@ struct osd_fb_dev_s {
 	struct mutex lock;
 	struct fb_info *fb_info;
 	struct platform_device *dev;
-	u32 fb_mem_paddr;
+	phys_addr_t fb_mem_paddr;
 	void __iomem *fb_mem_vaddr;
 	u32 fb_len;
+	phys_addr_t fb_mem_afbc_paddr[OSD_MAX_BUF_NUM];
+	void __iomem *fb_mem_afbc_vaddr[OSD_MAX_BUF_NUM];
+	u32 fb_afbc_len[OSD_MAX_BUF_NUM];
 	const struct color_bit_define_s *color;
 	enum vmode_e vmode;
 	struct osd_ctl_s osd_ctl;
@@ -53,6 +57,8 @@ struct osd_fb_dev_s {
 	u32 preblend_enable;
 	u32 enable_key_flag;
 	u32 color_key;
+	u32 fb_index;
+	bool dis_osd_mchange;
 };
 
 #define OSD_INVALID_INFO        0xffffffff
@@ -61,6 +67,8 @@ struct osd_fb_dev_s {
 #define OSD_END                 5
 
 extern phys_addr_t get_fb_rmem_paddr(int index);
+extern void __iomem *get_fb_rmem_vaddr(int index);
+extern size_t get_fb_rmem_size(int index);
 extern int osd_blank(int blank_mode, struct fb_info *info);
 extern struct osd_fb_dev_s *gp_fbdev_list[];
 extern const struct color_bit_define_s default_color_format_array[];

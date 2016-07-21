@@ -24,17 +24,25 @@
 #include "mpll_clk.h"
 
 #include "clk.h"
-void __iomem *reg_base_hiubus;
+
+#undef pr_fmt
+#define pr_fmt(fmt) "gxbb_clk: " fmt
+
+static void __iomem *reg_base_hiubus;
+static void __iomem *reg_base_aobus;
+
+
 #define	OFFSET(x)	(x << 2)
 #undef	HHI_GCLK_MPEG0
 #undef	HHI_MALI_CLK_CNTL
 #undef	HHI_VAPBCLK_CNTL
 #undef	HHI_XTAL_DIVN_CNTL
-
+#undef	HHI_SYS_CPU_CLK_CNTL1
 #define	HHI_GCLK_MPEG0			OFFSET(0x50)
 #define	HHI_MALI_CLK_CNTL		OFFSET(0x6c)
 #define	HHI_VAPBCLK_CNTL		OFFSET(0x7d)
 #define	HHI_XTAL_DIVN_CNTL		OFFSET(0x2f)
+#define	HHI_SYS_CPU_CLK_CNTL1		OFFSET(0x57)
 
 #undef HHI_MPLL_CNTL
 #define	HHI_MPLL_CNTL			OFFSET(0xa0)
@@ -86,6 +94,11 @@ static struct amlogic_fixed_rate_clock gxbb_fixed_rate_ext_clks[] __initdata = {
 static struct amlogic_mux_clock mux_clks[] __initdata = {
 	MUX(CLK_MALI, "clk_mali", mux_mali_p, HHI_MALI_CLK_CNTL, 31, 1, 0),
 	MUX(CLK_SPDIF, "clk_spdif", cts_spdif_p, HHI_AUD_CLK_CNTL2, 27, 1, 0)
+};
+
+/* divider clocks */
+static struct amlogic_div_clock gxbb_div_clks[] __initdata = {
+	DIV(CLK_APB_P, "apb_pclk", "vcpu", HHI_SYS_CPU_CLK_CNTL1, 3, 3, 0),
 };
 
 
@@ -189,8 +202,8 @@ static void __init gxbb_clk_init(struct device_node *np)
 	if ((!reg_base_hiubus) || (!reg_base_aobus))
 		panic("%s: failed to map registers\n", __func__);
 
-	pr_debug("gxbb clk HIU base is 0x%p\n", reg_base_hiubus);
-	pr_debug("gxbb clk ao base is 0x%p\n", reg_base_aobus);
+	pr_debug("HIU base is 0x%p\n", reg_base_hiubus);
+	pr_debug("ao base is 0x%p\n", reg_base_aobus);
 
 	amlogic_clk_init(np, reg_base_hiubus, reg_base_aobus,
 			CLK_NR_CLKS, NULL, 0, NULL, 0);
@@ -199,6 +212,8 @@ static void __init gxbb_clk_init(struct device_node *np)
 	mpll_clk_init(reg_base_hiubus, mpll_tab, ARRAY_SIZE(mpll_tab));
 	amlogic_clk_register_mux(mux_clks,
 			ARRAY_SIZE(mux_clks));
+	amlogic_clk_register_div(gxbb_div_clks,
+			ARRAY_SIZE(gxbb_div_clks));
 	amlogic_clk_register_branches(clk_branches,
 		  ARRAY_SIZE(clk_branches));
 	amlogic_clk_register_gate(clk_gates,
@@ -234,7 +249,7 @@ static void __init gxbb_clk_init(struct device_node *np)
 
 		for (i = 0; i < count; i++) {
 			char *clk_name = clks[i];
-			pr_info("clkrate [ %s \t] : %luHz\n", clk_name,
+			pr_info("[ %s \t] ->clockrate: %luHz\n", clk_name,
 				_get_rate(clk_name));
 		}
 
@@ -267,6 +282,6 @@ static void __init gxbb_clk_init(struct device_node *np)
 			clk_put(fixdiv5);
 
 	}
-	pr_info("gxbb clock initialization complete\n");
+	pr_info("clock initialization complete\n");
 }
 CLK_OF_DECLARE(gxbb, "amlogic, gxbb-clock", gxbb_clk_init);

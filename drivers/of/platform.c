@@ -106,7 +106,6 @@ void of_device_make_bus_id(struct device *dev)
 		dev_set_name(dev, "%s", name);
 		return;
 	}
-
 	/*
 	 * For MMIO, get the physical address
 	 */
