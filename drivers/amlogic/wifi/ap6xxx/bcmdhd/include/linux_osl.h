@@ -151,7 +151,7 @@ extern uint osl_malloc_failed(osl_t *osh);
 	osl_dma_free_consistent((osh), (void*)(va), (size), (pa))
 
 #if defined(BCMPCIE)
-#if defined(CONFIG_DHD_USE_STATIC_BUF) && defined(DHD_USE_STATIC_FLOWRING)
+#if defined(CONFIG_BCMDHD_USE_STATIC_BUF) && defined(DHD_USE_STATIC_FLOWRING)
 #define	DMA_ALLOC_CONSISTENT_STATIC(osh, size, align, tot, pap, dmah, idx) \
 	osl_dma_alloc_consistent_static((osh), (size), (align), (tot), (pap), (idx))
 #define	DMA_FREE_CONSISTENT_STATIC(osh, va, size, pa, dmah, idx) \
@@ -161,7 +161,7 @@ extern void *osl_dma_alloc_consistent_static(osl_t *osh, uint size, uint16 align
 	uint *tot, dmaaddr_t *pap, uint16 idx);
 extern void osl_dma_free_consistent_static(osl_t *osh, void *va, uint size, dmaaddr_t pa,
 	uint16 idx);
-#endif /* CONFIG_DHD_USE_STATIC_BUF && DHD_USE_STATIC_FLOWRING */
+#endif /* CONFIG_BCMDHD_USE_STATIC_BUF && DHD_USE_STATIC_FLOWRING */
 #endif /* BCMPCIE */
 
 extern uint osl_dma_consistent_align(void);
@@ -349,13 +349,13 @@ extern int osl_error(int bcmerror);
 #define PKTLIST_DUMP(osh, buf)		BCM_REFERENCE(osh)
 #define PKTDBG_TRACE(osh, pkt, bit)	BCM_REFERENCE(osh)
 #define	PKTFREE(osh, skb, send)		osl_pktfree((osh), (skb), (send))
-#ifdef CONFIG_DHD_USE_STATIC_BUF
+#ifdef CONFIG_BCMDHD_USE_STATIC_BUF
 #define	PKTGET_STATIC(osh, len, send)		osl_pktget_static((osh), (len))
 #define	PKTFREE_STATIC(osh, skb, send)		osl_pktfree_static((osh), (skb), (send))
 #else
 #define	PKTGET_STATIC	PKTGET
 #define	PKTFREE_STATIC	PKTFREE
-#endif /* CONFIG_DHD_USE_STATIC_BUF */
+#endif /* CONFIG_BCMDHD_USE_STATIC_BUF */
 #define	PKTDATA(osh, skb)		({BCM_REFERENCE(osh); (((struct sk_buff*)(skb))->data);})
 #define	PKTLEN(osh, skb)		({BCM_REFERENCE(osh); (((struct sk_buff*)(skb))->len);})
 #define PKTHEADROOM(osh, skb)		(PKTDATA(osh, skb)-(((struct sk_buff*)(skb))->head))

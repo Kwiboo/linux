@@ -56,9 +56,9 @@ extern spinlock_t l2x0_reg_lock;
 #endif
 
 #if defined(BCMPCIE)
-#if defined(CONFIG_DHD_USE_STATIC_BUF) && defined(DHD_USE_STATIC_FLOWRING)
+#if defined(CONFIG_BCMDHD_USE_STATIC_BUF) && defined(DHD_USE_STATIC_FLOWRING)
 #include <bcmpcie.h>
-#endif /* CONFIG_DHD_USE_STATIC_BUF && DHD_USE_STATIC_FLOWRING */
+#endif /* CONFIG_BCMDHD_USE_STATIC_BUF && DHD_USE_STATIC_FLOWRING */
 #endif /* BCMPCIE */
 
 #define PCI_CFG_RETRY		10
@@ -67,7 +67,7 @@ extern spinlock_t l2x0_reg_lock;
 #define BCM_MEM_FILENAME_LEN	24		/* Mem. filename length */
 #define DUMPBUFSZ 1024
 
-#ifdef CONFIG_DHD_USE_STATIC_BUF
+#ifdef CONFIG_BCMDHD_USE_STATIC_BUF
 #define DHD_SKB_HDRSIZE		336
 #define DHD_SKB_1PAGE_BUFSIZE	((PAGE_SIZE*1)-DHD_SKB_HDRSIZE)
 #define DHD_SKB_2PAGE_BUFSIZE	((PAGE_SIZE*2)-DHD_SKB_HDRSIZE)
@@ -121,7 +121,7 @@ bcm_static_flowring_buf_t *bcm_static_flowring = 0;
 #endif /* BCMPCIE && DHD_USE_STATIC_FLOWRING */
 
 void* wifi_platform_prealloc(void *adapter, int section, unsigned long size);
-#endif /* CONFIG_DHD_USE_STATIC_BUF */
+#endif /* CONFIG_BCMDHD_USE_STATIC_BUF */
 
 typedef struct bcm_mem_link {
 	struct bcm_mem_link *prev;
@@ -411,7 +411,7 @@ osl_attach(void *pdev, uint bustype, bool pkttag)
 
 int osl_static_mem_init(osl_t *osh, void *adapter)
 {
-#ifdef CONFIG_DHD_USE_STATIC_BUF
+#ifdef CONFIG_BCMDHD_USE_STATIC_BUF
 	if (!bcm_static_buf && adapter) {
 		if (!(bcm_static_buf = (bcm_static_buf_t *)wifi_platform_prealloc(adapter,
 			3, STATIC_BUF_SIZE + STATIC_BUF_TOTAL_LEN))) {
@@ -476,7 +476,7 @@ int osl_static_mem_init(osl_t *osh, void *adapter)
 		spin_lock_init(&bcm_static_flowring->flowring_lock);
 	}
 #endif /* BCMPCIE && DHD_USE_STATIC_FLOWRING */
-#endif /* CONFIG_DHD_USE_STATIC_BUF */
+#endif /* CONFIG_BCMDHD_USE_STATIC_BUF */
 
 	return 0;
 }
@@ -514,7 +514,7 @@ osl_detach(osl_t *osh)
 
 int osl_static_mem_deinit(osl_t *osh, void *adapter)
 {
-#ifdef CONFIG_DHD_USE_STATIC_BUF
+#ifdef CONFIG_BCMDHD_USE_STATIC_BUF
 	if (bcm_static_buf) {
 		bcm_static_buf = 0;
 	}
@@ -528,7 +528,7 @@ int osl_static_mem_deinit(osl_t *osh, void *adapter)
 		bcm_static_flowring = 0;
 	}
 #endif /* BCMPCIE && DHD_USE_STATIC_FLOWRING */
-#endif /* CONFIG_DHD_USE_STATIC_BUF */
+#endif /* CONFIG_BCMDHD_USE_STATIC_BUF */
 	return 0;
 }
 
@@ -688,7 +688,7 @@ osl_ctfpool_stats(osl_t *osh, void *b)
 	if ((osh == NULL) || (osh->ctfpool == NULL))
 		return;
 
-#ifdef CONFIG_DHD_USE_STATIC_BUF
+#ifdef CONFIG_BCMDHD_USE_STATIC_BUF
 	if (bcm_static_buf) {
 		bcm_static_buf = 0;
 	}
@@ -702,7 +702,7 @@ osl_ctfpool_stats(osl_t *osh, void *b)
 		bcm_static_flowring = 0;
 	}
 #endif /* BCMPCIE && DHD_USE_STATIC_FLOWRING */
-#endif /* CONFIG_DHD_USE_STATIC_BUF */
+#endif /* CONFIG_BCMDHD_USE_STATIC_BUF */
 
 	bb = b;
 
@@ -1022,7 +1022,7 @@ next_skb:
 	}
 }
 
-#ifdef CONFIG_DHD_USE_STATIC_BUF
+#ifdef CONFIG_BCMDHD_USE_STATIC_BUF
 void*
 osl_pktget_static(osl_t *osh, uint len)
 {
@@ -1226,7 +1226,7 @@ osl_dma_free_consistent_static(osl_t *osh, void *va, uint size,
 	spin_unlock_irqrestore(&bcm_static_flowring->flowring_lock, flags);
 }
 #endif /* BCMPCIE && DHD_USE_STATIC_FLOWRING */
-#endif /* CONFIG_DHD_USE_STATIC_BUF */
+#endif /* CONFIG_BCMDHD_USE_STATIC_BUF */
 
 uint32
 osl_pci_read_config(osl_t *osh, uint offset, uint size)
@@ -1348,7 +1348,7 @@ osl_malloc(osl_t *osh, uint size)
 	/* only ASSERT if osh is defined */
 	if (osh)
 		ASSERT(osh->magic == OS_HANDLE_MAGIC);
-#ifdef CONFIG_DHD_USE_STATIC_BUF
+#ifdef CONFIG_BCMDHD_USE_STATIC_BUF
 	if (bcm_static_buf)
 	{
 		int i = 0;
@@ -1380,7 +1380,7 @@ osl_malloc(osl_t *osh, uint size)
 		}
 	}
 original:
-#endif /* CONFIG_DHD_USE_STATIC_BUF */
+#endif /* CONFIG_BCMDHD_USE_STATIC_BUF */
 
 	flags = CAN_SLEEP() ? GFP_KERNEL: GFP_ATOMIC;
 	if ((addr = kmalloc(size, flags)) == NULL) {
@@ -1411,7 +1411,7 @@ osl_mallocz(osl_t *osh, uint size)
 void
 osl_mfree(osl_t *osh, void *addr, uint size)
 {
-#ifdef CONFIG_DHD_USE_STATIC_BUF
+#ifdef CONFIG_BCMDHD_USE_STATIC_BUF
 	if (bcm_static_buf)
 	{
 		if ((addr > (void *)bcm_static_buf) && ((unsigned char *)addr
@@ -1432,7 +1432,7 @@ osl_mfree(osl_t *osh, void *addr, uint size)
 			return;
 		}
 	}
-#endif /* CONFIG_DHD_USE_STATIC_BUF */
+#endif /* CONFIG_BCMDHD_USE_STATIC_BUF */
 	if (osh && osh->cmn) {
 		ASSERT(osh->magic == OS_HANDLE_MAGIC);
 
