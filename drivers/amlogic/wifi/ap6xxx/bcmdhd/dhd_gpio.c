@@ -132,7 +132,7 @@ int bcm_wlan_get_mac_address(unsigned char *buf)
 	return err;
 }
 
-#ifdef CONFIG_DHD_USE_STATIC_BUF
+#ifdef CONFIG_BCMDHD_USE_STATIC_BUF
 extern void *bcmdhd_mem_prealloc(int section, unsigned long size);
 void* bcm_wlan_prealloc(int section, unsigned long size)
 {
@@ -154,7 +154,7 @@ int bcm_wlan_set_plat_data(void) {
 	dhd_wlan_control.set_power = bcm_wlan_set_power;
 	dhd_wlan_control.set_carddetect = bcm_wlan_set_carddetect;
 	dhd_wlan_control.get_mac_addr = bcm_wlan_get_mac_address;
-#ifdef CONFIG_DHD_USE_STATIC_BUF
+#ifdef CONFIG_BCMDHD_USE_STATIC_BUF
 	dhd_wlan_control.mem_prealloc = bcm_wlan_prealloc;
 #endif
 	return 0;
