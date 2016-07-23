@@ -1061,13 +1061,13 @@ void dhd_os_prefree(dhd_pub_t *dhdpub, void *addr, uint size);
 
 int dhd_process_cid_mac(dhd_pub_t *dhdp, bool prepost);
 
-#if defined(CONFIG_DHD_USE_STATIC_BUF)
+#if defined(CONFIG_BCMDHD_USE_STATIC_BUF)
 #define DHD_OS_PREALLOC(dhdpub, section, size) dhd_os_prealloc(dhdpub, section, size, FALSE)
 #define DHD_OS_PREFREE(dhdpub, addr, size) dhd_os_prefree(dhdpub, addr, size)
 #else
 #define DHD_OS_PREALLOC(dhdpub, section, size) MALLOC(dhdpub->osh, size)
 #define DHD_OS_PREFREE(dhdpub, addr, size) MFREE(dhdpub->osh, addr, size)
-#endif /* defined(CONFIG_DHD_USE_STATIC_BUF) */
+#endif /* defined(CONFIG_BCMDHD_USE_STATIC_BUF) */
 
 
 #define dhd_add_flowid(pub, ifidx, ac_prio, ea, flowid)  do {} while (0)

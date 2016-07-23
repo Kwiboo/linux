@@ -499,11 +499,11 @@ typedef struct dhd_pktid_map {
 
 #define PKTID_AVAIL(map)                 dhd_pktid_map_avail_cnt(map)
 
-#if defined(CONFIG_DHD_USE_STATIC_BUF) && defined(DHD_USE_STATIC_FLOWRING)
+#if defined(CONFIG_BCMDHD_USE_STATIC_BUF) && defined(DHD_USE_STATIC_FLOWRING)
 #define FLOWRING_NAME	"h2dflr"
 #define RING_IS_FLOWRING(ring) \
 	((strncmp(ring->name, FLOWRING_NAME, sizeof(FLOWRING_NAME))) == (0))
-#endif /* CONFIG_DHD_USE_STATIC_BUF && DHD_USE_STATIC_FLOWRING */
+#endif /* CONFIG_BCMDHD_USE_STATIC_BUF && DHD_USE_STATIC_FLOWRING */
 
 /*
  * +---------------------------------------------------------------------------+
@@ -889,10 +889,10 @@ int dhd_prot_attach(dhd_pub_t *dhd)
 	return 0;
 
 fail:
-#ifndef CONFIG_DHD_USE_STATIC_BUF
+#ifndef CONFIG_BCMDHD_USE_STATIC_BUF
 	if (prot != NULL)
 		dhd_prot_detach(dhd);
-#endif /* CONFIG_DHD_USE_STATIC_BUF */
+#endif /* CONFIG_BCMDHD_USE_STATIC_BUF */
 	return BCME_NOMEM;
 }
 
@@ -1076,9 +1076,9 @@ void dhd_prot_detach(dhd_pub_t *dhd)
 
 		NATIVE_TO_PKTID_FINI(dhd->prot->pktid_map_handle);
 
-#ifndef CONFIG_DHD_USE_STATIC_BUF
+#ifndef CONFIG_BCMDHD_USE_STATIC_BUF
 		MFREE(dhd->osh, dhd->prot, sizeof(dhd_prot_t));
-#endif /* CONFIG_DHD_USE_STATIC_BUF */
+#endif /* CONFIG_BCMDHD_USE_STATIC_BUF */
 
 		dhd->prot = NULL;
 	}
@@ -3214,13 +3214,13 @@ prot_ring_attach(dhd_prot_t * prot, char* name, uint16 max_item, uint16 len_item
 	size = max_item * len_item;
 
 	/* Ring Memmory allocation */
-#if defined(CONFIG_DHD_USE_STATIC_BUF) && defined(DHD_USE_STATIC_FLOWRING)
+#if defined(CONFIG_BCMDHD_USE_STATIC_BUF) && defined(DHD_USE_STATIC_FLOWRING)
 	if (RING_IS_FLOWRING(ring)) {
 		ring->ring_base.va = DMA_ALLOC_CONSISTENT_STATIC(prot->osh,
 			size, DMA_ALIGN_LEN, &alloced, &ring->ring_base.pa,
 			&ring->ring_base.dmah, ringid);
 	} else
-#endif /* CONFIG_DHD_USE_STATIC_BUF && DHD_USE_STATIC_FLOWRING */
+#endif /* CONFIG_BCMDHD_USE_STATIC_BUF && DHD_USE_STATIC_FLOWRING */
 	ring->ring_base.va = DMA_ALLOC_CONSISTENT(prot->osh, size, DMA_ALIGN_LEN,
 		&alloced, &ring->ring_base.pa, &ring->ring_base.dmah);
 
@@ -3313,12 +3313,12 @@ dhd_prot_ring_detach(dhd_pub_t *dhd, msgbuf_ring_t * ring)
 	size = ring->ringmem->max_item * ring->ringmem->len_items;
 	/* Free up ring */
 	if (ring->ring_base.va) {
-#if defined(CONFIG_DHD_USE_STATIC_BUF) && defined(DHD_USE_STATIC_FLOWRING)
+#if defined(CONFIG_BCMDHD_USE_STATIC_BUF) && defined(DHD_USE_STATIC_FLOWRING)
 		if (RING_IS_FLOWRING(ring)) {
 			DMA_FREE_CONSISTENT_STATIC(prot->osh, ring->ring_base.va, size,
 				ring->ring_base.pa, ring->ring_base.dmah, ring->idx);
 		} else
-#endif /* CONFIG_DHD_USE_STATIC_BUF && DHD_USE_STATIC_FLOWRING */
+#endif /* CONFIG_BCMDHD_USE_STATIC_BUF && DHD_USE_STATIC_FLOWRING */
 		DMA_FREE_CONSISTENT(prot->osh, ring->ring_base.va, size, ring->ring_base.pa,
 			ring->ring_base.dmah);
 		ring->ring_base.va = NULL;
