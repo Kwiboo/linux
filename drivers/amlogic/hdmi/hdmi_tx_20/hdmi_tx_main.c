@@ -999,7 +999,7 @@ static void hdmitx_set_drm_pkt(struct master_display_info_s *data)
 		hdmitx_device.HWOp.SetPacket(HDMI_PACKET_DRM, DRM_DB, DRM_HB);
 
 next_avipkt:
-	if (((data->features >> 16) && 0xff) == 9) {
+	if (((data->features >> 16) & 0xff) == 0x9) {
 		DRM_HB[1] = 3;
 		DRM_HB[2] = 6;
 	} else {
