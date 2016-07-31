@@ -250,6 +250,7 @@ __setup("logo=", logo_setup);
 static int __init get_hdmi_mode(char *str)
 {
 	hdmimode = vmode_name_to_mode(str);
+	set_vout_init_vmode(hdmimode);
 
 	pr_info("get hdmimode: %s\n", str);
 	return 1;

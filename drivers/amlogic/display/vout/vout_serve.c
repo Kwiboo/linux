@@ -586,6 +586,17 @@ static int str2lower(char *str)
 	return 0;
 }
 
+int set_vout_init_vmode(enum vmode_e mode)
+{
+	int ret = 0;
+
+	vout_init_vmode = mode;
+	uboot_display = 1;
+
+	return ret;
+}
+EXPORT_SYMBOL(set_vout_init_vmode);
+
 static void vout_init_mode_parse(char *str)
 {
 	enum vmode_e vmode;
